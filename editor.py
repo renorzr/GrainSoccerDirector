@@ -48,23 +48,6 @@ class Editor:
         self.logo_video = {"fps": fps, "duration": duration, "frames": frames}
         print(f"loading logo video {self.game.logo_video} with {self.logo_video['fps']} fps and {self.logo_video['duration']} duration")
 
-    # 预览比赛视频中配音解说的部分
-    def preview(self):
-        self.add_comment_voices()
-        logging.info(f"comment audio duration: {self.comment_audio.duration}")
-
-        clips = []
-        for index, event in enumerate(self.game.events):
-            if event.type.level < 8:
-                continue
-            clip = self.main_video.subclipped(event.time - PREVIEW_BUFFER, event.time + PREVIEW_BUFFER)
-            clip.audio = self.comment_audio.subclipped(event.time - PREVIEW_BUFFER, event.time + PREVIEW_BUFFER)
-            text_clip = TextClip(text=f"event-{index}: {event.type} {format_time(event.time)}", font_size=24, color='white', font='ROGFonts-Regular_0.otf').with_duration(clip.duration)
-            clips.append(CompositeVideoClip([clip, text_clip.with_position(("center", "top"))]))
-
-        # 连接有解说的片段并保存为预览视频
-        concatenate_videoclips(clips).write_videofile('preview.mp4', threads=32, fps=16, preset='ultrafast')
-
     def edit(self):
         if not os.path.exists(TEMP_VIDEO_NAME):
             self.create_output_video()

@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from comments_edit import edit
 from editor import Editor
 from event_analyzer import EventAnalyzer
