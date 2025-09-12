@@ -15,11 +15,12 @@ class EventAnalyzer:
     def __init__(self, game):
         self.game = game
         self.current_deadball = None
+        self.pkl_file = os.path.join(self.game.directory, f'game.{self.game.game_id}.pkl')
 
     # 分析事件(生成解说词, 更新比分, 更新死球状态)
     def analyze(self):
-        if os.path.exists(f'game.{self.game.game_id}.pkl'):
-            with open(f'game.{self.game.game_id}.pkl', 'rb') as f:
+        if os.path.exists(self.pkl_file):
+            with open(self.pkl_file, 'rb') as f:
                 game_data = pickle.load(f)
                 comments = self.game.comments = game_data['comments']
                 self.game.score_updates = game_data['score_updates']
@@ -83,7 +84,7 @@ class EventAnalyzer:
 
             last_comment_time = event.time
 
-        with open(f'game.{self.game.game_id}.pkl', 'wb') as f:
+        with open(self.pkl_file, 'wb') as f:
             pickle.dump({'comments': comments, 'score_updates': self.game.score_updates, 'deadballs': self.game.deadballs}, f)
 
     # 生成事件解说词

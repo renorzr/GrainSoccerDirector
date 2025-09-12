@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>足球导演 - Soccer Director</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚽ 足球导演</h1>
+            <p>Soccer Director - 智能足球视频制作系统</p>
+        </div>
+
+        <!-- 比赛管理主页面 -->
+        <div id="mainPage" class="main-content">
+            <div class="page-header">
+                <h2>比赛管理</h2>
+                <div class="page-actions">
+                    <button class="btn btn-primary" onclick="showCreateGameModal()">创建新比赛</button>
+                    <button class="btn btn-secondary" onclick="loadGames()">刷新比赛列表</button>
+                </div>
+            </div>
+
+            <div id="gamesList" class="game-list">
+                <!-- 比赛列表将在这里动态加载 -->
+            </div>
+        </div>
+
+        <!-- 比赛详情页面 -->
+        <div id="gameDetailPage" class="game-detail-content hidden">
+            <div class="page-header">
+                <button class="btn btn-secondary back-btn" onclick="showMainPage()">← 返回比赛管理</button>
+                <h2 id="gameDetailTitle">比赛详情</h2>
+            </div>
+
+            <div class="tabs">
+                <button class="tab active" onclick="showGameTab('detail')">比赛详情</button>
+                <button class="tab" onclick="showGameTab('events')">事件编辑</button>
+                <button class="tab" onclick="showGameTab('video')">视频制作</button>
+                <button class="tab" onclick="showGameTab('comments')">评论编辑</button>
+            </div>
+
+            <div class="tab-content">
+                <!-- 比赛详情 -->
+                <div id="gameDetail" class="tab-panel active">
+                    <div class="match-details-container">
+                        <!-- 比赛基本信息 -->
+                        <div class="match-info-section">
+                            <h3>📋 比赛信息</h3>
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <label>比赛名称:</label>
+                                    <input type="text" id="matchName" class="editable-input" readonly>
+                                </div>
+                                <div class="info-item">
+                                    <label>比赛节次:</label>
+                                    <select id="matchQuarter" class="editable-select" disabled>
+                                        <option value="1">第1节</option>
+                                        <option value="2">第2节</option>
+                                        <option value="3">第3节</option>
+                                        <option value="4">第4节</option>
+                                    </select>
+                                </div>
+                                <div class="info-item full-width">
+                                    <label>比赛描述:</label>
+                                    <textarea id="matchDescription" class="editable-textarea" rows="2"
+                                        readonly></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 队伍信息 -->
+                        <div class="teams-section">
+                            <h3>⚽ 队伍信息</h3>
+                            <div class="teams-grid">
+                                <div class="team-card" id="team0Card">
+                                    <div class="team-header">
+                                        <div class="team-color" id="team0Color"></div>
+                                        <input type="text" id="team0Name" class="editable-input team-name-input"
+                                            readonly>
+                                    </div>
+                                    <div class="team-score">
+                                        <span class="score-label">得分:</span>
+                                        <input type="number" id="team0Score" class="editable-input score-input" min="0"
+                                            readonly>
+                                    </div>
+                                    <div class="team-color-select" style="display: none;">
+                                        <label>队伍颜色:</label>
+                                        <select id="team0ColorSelect" class="editable-select" disabled>
+                                            <option value="深蓝">深蓝</option>
+                                            <option value="浅蓝">浅蓝</option>
+                                            <option value="红色">红色</option>
+                                            <option value="绿色">绿色</option>
+                                            <option value="黄色">黄色</option>
+                                            <option value="橙色">橙色</option>
+                                            <option value="紫色">紫色</option>
+                                            <option value="粉色">粉色</option>
+                                            <option value="黑色">黑色</option>
+                                            <option value="白色">白色</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="vs-divider">
+                                    <span>VS</span>
+                                </div>
+                                <div class="team-card" id="team1Card">
+                                    <div class="team-header">
+                                        <div class="team-color" id="team1Color"></div>
+                                        <input type="text" id="team1Name" class="editable-input team-name-input"
+                                            readonly>
+                                    </div>
+                                    <div class="team-score">
+                                        <span class="score-label">得分:</span>
+                                        <input type="number" id="team1Score" class="editable-input score-input" min="0"
+                                            readonly>
+                                    </div>
+                                    <div class="team-color-select" style="display: none;">
+                                        <label>队伍颜色:</label>
+                                        <select id="team1ColorSelect" class="editable-select" disabled>
+                                            <option value="深蓝">深蓝</option>
+                                            <option value="浅蓝">浅蓝</option>
+                                            <option value="红色">红色</option>
+                                            <option value="绿色">绿色</option>
+                                            <option value="黄色">黄色</option>
+                                            <option value="橙色">橙色</option>
+                                            <option value="紫色">紫色</option>
+                                            <option value="粉色">粉色</option>
+                                            <option value="黑色">黑色</option>
+                                            <option value="白色">白色</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 视频信息 -->
+                        <div class="video-section">
+                            <h3>🎥 视频信息</h3>
+                            <div class="video-info">
+                                <div class="info-item">
+                                    <label>主视频:</label>
+                                    <div class="video-url-container">
+                                        <input type="url" id="mainVideoUrl" class="video-url-input editable-input"
+                                            readonly>
+                                        <button class="btn btn-secondary btn-sm" onclick="copyVideoUrl()">复制链接</button>
+                                        <button class="btn btn-primary btn-sm" onclick="previewVideo()">预览视频</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 评论要求 -->
+                        <div class="comment-requirement-section">
+                            <h3>💬 评论要求</h3>
+                            <div class="info-item">
+                                <label>评论立场:</label>
+                                <textarea id="commentRequirement" class="editable-textarea" rows="2"
+                                    readonly></textarea>
+                            </div>
+                        </div>
+
+                        <!-- 操作按钮 -->
+                        <div class="match-actions">
+                            <button class="btn btn-primary" id="editBtn" onclick="toggleEditMode()">编辑</button>
+                            <button class="btn btn-success" id="saveBtn" onclick="saveMatchDetails()"
+                                style="display: none;">保存</button>
+                            <button class="btn btn-secondary" id="cancelBtn" onclick="cancelEdit()"
+                                style="display: none;">取消</button>
+                            <button class="btn btn-secondary" onclick="refreshMatchDetails()">刷新信息</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 事件编辑 -->
+                <div id="gameEvents" class="tab-panel">
+                    <h3>事件编辑</h3>
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="showAddEventModal()">添加事件</button>
+                        <button class="btn btn-success" onclick="saveEvents()">保存事件</button>
+                    </div>
+
+                    <table class="events-table" id="eventsTable">
+                        <thead>
+                            <tr>
+                                <th>时间</th>
+                                <th>类型</th>
+                                <th>队伍</th>
+                                <th>球员</th>
+                                <th>描述</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="eventsTableBody">
+                            <!-- 事件列表将在这里动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 视频制作 -->
+                <div id="gameVideo" class="tab-panel">
+                    <h3>视频制作</h3>
+                    <div class="form-group">
+                        <button class="btn btn-primary" onclick="startVideoMaking()">开始制作视频</button>
+                        <button class="btn btn-danger" onclick="cancelVideoMaking()">取消制作</button>
+                        <button class="btn btn-secondary" onclick="loadTaskStatus()">刷新状态</button>
+                    </div>
+
+                    <div id="taskStatus">
+                        <!-- 任务状态将在这里显示 -->
+                    </div>
+                </div>
+
+                <!-- 评论编辑 -->
+                <div id="gameComments" class="tab-panel">
+                    <h3>评论编辑</h3>
+                    <div id="commentsList">
+                        <!-- 评论列表将在这里动态加载 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 创建比赛模态框 -->
+    <div id="createGameModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('createGameModal')">&times;</span>
+            <h2>创建新比赛</h2>
+            <form id="createGameForm">
+                <div class="form-group">
+                    <label for="gameId">比赛ID:</label>
+                    <input type="text" id="gameId" required>
+                </div>
+                <div class="form-group">
+                    <label for="gameName">比赛名称:</label>
+                    <input type="text" id="gameName" required>
+                </div>
+                <div class="form-group">
+                    <label for="mainVideo">主视频文件:</label>
+                    <input type="text" id="mainVideo" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="team0Name">队伍1名称:</label>
+                        <input type="text" id="team0Name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="team0Color">队伍1颜色:</label>
+                        <input type="text" id="team0Color" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="team1Name">队伍2名称:</label>
+                        <input type="text" id="team1Name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="team1Color">队伍2颜色:</label>
+                        <input type="text" id="team1Color" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">创建比赛</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('createGameModal')">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 添加事件模态框 -->
+    <div id="addEventModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('addEventModal')">&times;</span>
+            <h2>添加事件</h2>
+            <form id="addEventForm">
+                <div class="form-group">
+                    <label for="eventTime">时间 (格式: MM:SS.S):</label>
+                    <input type="text" id="eventTime" placeholder="例如: 02:13.2" required>
+                </div>
+                <div class="form-group">
+                    <label for="eventType">事件类型:</label>
+                    <select id="eventType" required>
+                        <option value="">请选择事件类型</option>
+                        <option value="Goal">进球</option>
+                        <option value="Miss">射门未进</option>
+                        <option value="Foul">犯规</option>
+                        <option value="Out">出界</option>
+                        <option value="Continue">比赛继续</option>
+                        <option value="Breakthrough">突破</option>
+                        <option value="Save">扑救</option>
+                        <option value="Kickoff">开球</option>
+                        <option value="Tackle">抢断</option>
+                        <option value="Pass">传球</option>
+                        <option value="Comment">解说</option>
+                        <option value="Other">其它事件</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="eventTeam">队伍 (0或1):</label>
+                    <select id="eventTeam">
+                        <option value="">无</option>
+                        <option value="0">队伍1</option>
+                        <option value="1">队伍2</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="eventPlayer">球员号码:</label>
+                    <input type="text" id="eventPlayer" placeholder="例如: 10">
+                </div>
+                <div class="form-group">
+                    <label for="eventDesc">事件描述:</label>
+                    <textarea id="eventDesc" rows="3" placeholder="详细描述事件"></textarea>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">添加事件</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addEventModal')">取消</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+
+</html>

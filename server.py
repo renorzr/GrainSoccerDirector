@@ -3,6 +3,7 @@ dotenv.load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from game import Game
 from event import Event
@@ -17,8 +18,7 @@ import threading
 from datetime import datetime
 from enum import Enum
 
-GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", "games")
-os.chdir(GAME_DATA_DIR)
+GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
 
 # Task status enum
 class TaskStatus(Enum):
@@ -43,6 +43,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 静态文件服务
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
 # Global task management
 tasks = {}
 current_task = None
@@ -64,6 +67,7 @@ class CancellationFlag:
 
 def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
     """Background task to make video"""
+    global current_task
     try:
         with task_lock:
             if current_task != game_id:
@@ -72,7 +76,7 @@ def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
             tasks[game_id]["started_at"] = datetime.now().isoformat()
         
         # Load game data
-        game = Game(game_id, yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8")))
+        game = Game(game_id, yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8")), GAME_DATA_DIR)
         
         # Analyze events
         analyzer = EventAnalyzer(game)
@@ -116,6 +120,10 @@ def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
 
 @app.get("/")
 def root():
+    return FileResponse("frontend/index.html")
+
+@app.get("/api")
+def api_root():
     return {"message": "Soccer Director HTTP API is running"}
 
 @app.get("/games")
@@ -133,6 +141,14 @@ async def create_game(game_obj: dict):
         yaml.dump(game_obj, f)
 
     return {"id": game_obj['id'], "saved": True}
+
+@app.put("/game/{id}")
+async def update_game(id: str, game_obj: dict):
+    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml')
+    with open(save_path, "w", encoding="utf-8") as f:
+        yaml.dump(game_obj, f)
+    return {"id": id, "updated": True}
+
 
 @app.get("/game/{id}")
 async def get_game(id: str):
@@ -188,6 +204,7 @@ async def save_comment(id: str, index: int, comment_obj: dict):
 
 @app.post("/game/{id}/make")
 async def make_video(id: str):
+    global current_task
     with task_lock:
         # Check if there's already a task running
         if current_task is not None:
@@ -251,6 +268,7 @@ async def get_all_tasks():
 @app.post("/game/{id}/task/cancel")
 async def cancel_task(id: str):
     """Cancel a running or pending task"""
+    global current_task
     with task_lock:
         if id not in tasks:
             raise HTTPException(status_code=404, detail=f"No task found for game {id}")

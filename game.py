@@ -7,7 +7,7 @@ import yaml
 
 # Description: This file contains the Game class which is used to store the game data.
 class Game:
-    def __init__(self, game_id, obj):
+    def __init__(self, game_id, obj, directory):
         self.game_id = game_id
         self.name = obj['name']
         self.start = 0
@@ -15,20 +15,21 @@ class Game:
         self.description = obj.get('description', '')
         self.comment_requirement = obj.get('comment_requirement')
         self.teams = [Team(obj['name'], obj['color'], obj.get('code'), obj.get('score', 0)) for obj in obj['teams']]
-        self.main_video = obj.get('main_video', f'{game_id}.mp4')
-        self.logo_img = obj.get('logo_img', find_logo_img())
-        self.logo_video = obj.get('logo_video', 'logo.mp4')
-        self.brand_video = obj.get('brand_video', 'brand.mp4')
-        self.bgm = obj.get('bgm', 'bgm.mp3')
+        self.main_video = obj.get('main_video', os.path.join(directory, f'{game_id}.mp4'))
+        self.logo_img = obj.get('logo_img', find_logo_img(directory))
+        self.logo_video = obj.get('logo_video', os.path.join(directory, 'logo.mp4'))
+        self.brand_video = obj.get('brand_video', os.path.join(directory, 'brand.mp4'))
+        self.bgm = obj.get('bgm', os.path.join(directory, 'bgm.mp3'))
         self.prev_time = parse_time(obj.get('prev_time', 0))
         self.quarter = obj.get('quarter')
         self.narrator = obj.get('narrator', '云说')
-        self.events = Event.load_from_csv(f'events.{game_id}.csv')
+        self.events = Event.load_from_csv(os.path.join(directory, f'events.{game_id}.csv'))
         self.comments = []
         self.score_updates = []
         self.deadballs = []
+        self.directory = directory
 
-        with open(obj.get('scoreboard', 'scoreboard.yaml'), 'r') as f:
+        with open(obj.get('scoreboard', os.path.join(directory, 'scoreboard.yaml')), 'r') as f:
             scoreboard_props = yaml.safe_load(f)
 
         self.scoreboard = Scoreboard.from_dict(
@@ -67,10 +68,10 @@ class ScoreUpdate:
     def __repr__(self):
         return f"time: {self.time}, score0: {self.score0}, score1: {self.score1}"
 
-def find_logo_img():
+def find_logo_img(directory):
     exts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'ico', 'webp']
     for ext in exts:
-        path = f'logo.{ext}'
+        path = os.path.join(directory, f'logo.{ext}')
         if os.path.exists(path):
             return path
     return None

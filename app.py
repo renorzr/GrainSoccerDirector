@@ -49,7 +49,6 @@ edit: 编辑解说文字
     args = parser.parse_args()
 
     directory, filename = os.path.split(args.game)
-    os.chdir(directory)
     game_id, ext = os.path.splitext(os.path.basename(filename))
     if ext not in ['.yaml', '.yml']:
         print(f"错误：{filename} 不是有效的游戏配置文件")
@@ -57,7 +56,7 @@ edit: 编辑解说文字
         
     # read project yaml
     with open(filename, 'r', encoding='UTF-8') as f:
-        game = Game(game_id, yaml.safe_load(f))
+        game = Game(game_id, yaml.safe_load(f), directory)
     
     if args.action == "mark":
         mark.mark(game.main_video, f'events.{game_id}.csv')

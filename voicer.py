@@ -28,8 +28,8 @@ class Voicer:
             print(f"voice already exists for {text} at {voice_path}")
             return voice_path
 
-        if not os.path.exists(VOICE_DIR):
-            os.mkdir(VOICE_DIR)
+        if not os.path.exists(os.path.join(self.match.directory, VOICE_DIR)):
+            os.mkdir(os.path.join(self.match.directory, VOICE_DIR))
 
         # generate and save voice
         print(f"generating voice for comment {text} with path {voice_path}")
@@ -44,7 +44,7 @@ class Voicer:
         return voice_path
 
     def get_voice(self, text):
-        voice_path = os.path.join(VOICE_DIR, self.voice_name(text))
+        voice_path = os.path.join(self.match.directory, VOICE_DIR, self.voice_name(text))
         if not os.path.exists(voice_path):
             print(f"Voice file not found for {text} at {voice_path}")
             return {"path": voice_path, "duration": 0, "start": 0}

@@ -69,7 +69,7 @@ class Editor:
         self.add_audio()
 
     def create_output_video(self):
-        if os.path.exists(TEMP_VIDEO_NAME):
+        if os.path.exists(os.path.join(self.game.directory, TEMP_VIDEO_NAME)):
             print(f"output video {TEMP_VIDEO_NAME} already exists, skipping")
             return
 
@@ -83,7 +83,7 @@ class Editor:
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        out = cv2.VideoWriter(TEMP_VIDEO_NAME, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+        out = cv2.VideoWriter(os.path.join(self.game.directory, TEMP_VIDEO_NAME), cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
         replay_frames = []
         replay_time = None
         processing_replay_event = None
@@ -139,7 +139,7 @@ class Editor:
         cap.release()
 
     def create_output_audio(self):
-        if os.path.exists(TEMP_AUDIO_NAME):
+        if os.path.exists(os.path.join(self.game.directory, TEMP_AUDIO_NAME)):
             print(f"output audio {TEMP_AUDIO_NAME} already exists, skipping")
             return
 
@@ -170,13 +170,13 @@ class Editor:
             logging.info(f"Adding voice for comment {comment.text} at {comment.time}")
             audio_clips.append(voice_clip.with_start(comment.time))
             last_comment = comment
-        CompositeAudioClip(audio_clips).write_audiofile(TEMP_AUDIO_NAME, codec="aac")
+        CompositeAudioClip(audio_clips).write_audiofile(os.path.join(self.game.directory, TEMP_AUDIO_NAME), codec="aac")
 
     def add_audio(self):
-        command = f"ffmpeg -i {TEMP_VIDEO_NAME} -i {TEMP_AUDIO_NAME} -c:v copy -c:a aac -strict experimental output.mp4 -y"
+        command = f"ffmpeg -i {os.path.join(self.game.directory, TEMP_VIDEO_NAME)} -i {os.path.join(self.game.directory, TEMP_AUDIO_NAME)} -c:v copy -c:a aac -strict experimental {os.path.join(self.game.directory, 'output.mp4')} -y"
         subprocess.run(command, shell=True)
-        os.remove(TEMP_VIDEO_NAME)
-        os.remove(TEMP_AUDIO_NAME)
+        os.remove(os.path.join(self.game.directory, TEMP_VIDEO_NAME))
+        os.remove(os.path.join(self.game.directory, TEMP_AUDIO_NAME))
 
     def draw_scoreboard(self, time, frame):
         if time < self.game.start or time > self.game.end:
