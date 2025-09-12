@@ -22,7 +22,7 @@ TEMP_AUDIO_NAME = 'temp.aac'
 # 剪辑器
 class Editor:
     # 初始化剪辑器
-    def __init__(self, game):
+    def __init__(self, game, cancellation_flag=None):
         self.game = game
         self.voicer = Voicer(game)
         self.logo_clips = []
@@ -31,6 +31,7 @@ class Editor:
         self.comment_audio = None
         self.current_score = None
         self.logo_times = None
+        self.cancellation_flag = cancellation_flag  # 用于检查是否被取消
         self.load_logo_video()
     
     def load_logo_video(self):
@@ -49,28 +50,53 @@ class Editor:
         print(f"loading logo video {self.game.logo_video} with {self.logo_video['fps']} fps and {self.logo_video['duration']} duration")
 
     def edit(self):
-        if not os.path.exists(TEMP_VIDEO_NAME):
-            self.create_output_video()
-        if not os.path.exists(TEMP_AUDIO_NAME):
-            self.create_output_audio()
+        # 检查是否被取消
+        if self.cancellation_flag and self.cancellation_flag.is_cancelled():
+            raise InterruptedError("Video editing was cancelled")
+            
+        self.create_output_video()
+        
+        # 检查是否被取消
+        if self.cancellation_flag and self.cancellation_flag.is_cancelled():
+            raise InterruptedError("Video editing was cancelled")
+            
+        self.create_output_audio()
+        
+        # 检查是否被取消
+        if self.cancellation_flag and self.cancellation_flag.is_cancelled():
+            raise InterruptedError("Video editing was cancelled")
+            
         self.add_audio()
 
     def create_output_video(self):
+        if os.path.exists(TEMP_VIDEO_NAME):
+            print(f"output video {TEMP_VIDEO_NAME} already exists, skipping")
+            return
+
+        print(f"creating output video {self.game.main_video}")
+
+        replay_events = self.calculate_replay_times()
+        print(f"found {len(replay_events)} replay events")
+        self.calculate_logo_times(replay_events)
+
         cap = cv2.VideoCapture(self.game.main_video)
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         out = cv2.VideoWriter(TEMP_VIDEO_NAME, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
-
-        replay_events = self.calculate_replay_times()
-        print(f"found {len(replay_events)} replay events")
-        self.calculate_logo_times(replay_events)
         replay_frames = []
         replay_time = None
         processing_replay_event = None
         frame_count = 0
 
         while True:
+            # 检查是否被取消
+            if self.cancellation_flag and self.cancellation_flag.is_cancelled():
+                print("Video processing was cancelled")
+                out.release()
+                cap.release()
+                raise InterruptedError("Video processing was cancelled")
+                
             ret, frame = cap.read()
             if not ret:
                 break
@@ -113,6 +139,11 @@ class Editor:
         cap.release()
 
     def create_output_audio(self):
+        if os.path.exists(TEMP_AUDIO_NAME):
+            print(f"output audio {TEMP_AUDIO_NAME} already exists, skipping")
+            return
+
+        print(f"creating output audio {TEMP_AUDIO_NAME}")
         self.voicer.make_voice()
         audio_clips = [VideoFileClip(self.game.main_video).audio]
         last_comment = None
@@ -189,35 +220,20 @@ class Editor:
             cv2.addWeighted(frame, alpha, logo_frame, 1 - alpha, 0, frame)
             cv2.putText(frame, f"logo time: {logo_time:.2f} frame: {logo_frame_index}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
-    # 创建重放片段
-    def create_replays(self):
-        # pick replay events
-        replay_events = self.calculate_replay_times()
-        logging.info(f"found {len(replay_events)} replay events")
-        logo_video_duration = self.logo_video.duration
-
-        last_main_time = 0
-        for event in replay_events:
-            logging.info(f"Replay event {event.type.name}: {format_time(event.time)}")
-            logo_clip_before = self.logo_video.with_start(event.replay_time - logo_video_duration / 2).with_position(("center", "center")).with_effects([CrossFadeIn(LOGO_FLY / 2).copy(), CrossFadeOut(LOGO_FLY / 2).copy()])
-            replay_clip = self.main_video.subclipped(event.time - REPLAY_BUFFER, event.time + REPLAY_BUFFER).without_audio().with_effects([MultiplySpeed(0.5)]).with_start(event.replay_time)
-            logo_clip_after = self.logo_video.with_start(replay_clip.end - logo_video_duration / 2).with_position(("center", "center")).with_effects([CrossFadeIn(LOGO_FLY / 2).copy(), CrossFadeOut(LOGO_FLY / 2).copy()])
-
-            self.replay_clips.append(replay_clip)
-            self.logo_clips.append(logo_clip_before)
-            self.logo_clips.append(logo_clip_after)
-
     # 计算重放片段的时间
     def calculate_replay_times(self):
+        print(f"calculating replay times for {len(self.game.events)} events in {self.game.main_video}")
         # 获取所有需要重放的事件
         replay_events = [e for e in self.game.events if Tag.Replay in e.tags]
+        print(f"found {len(replay_events)} replay events")
         if not replay_events:
-            return
+            return []
 
         # 获取所有deadball时间段
         deadballs = self.game.deadballs
+        print(f"found {len(deadballs)} deadballs")
         if not deadballs:
-            return
+            return []
 
         # 按时间正序排序deadball和重放事件
         deadballs.sort(key=lambda x: x.start)

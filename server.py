@@ -5,15 +5,28 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from game import Game
+from event import Event
 import uvicorn
 import os
 import yaml
 import pickle
 from event_analyzer import EventAnalyzer
 from editor import Editor
+import asyncio
+import threading
+from datetime import datetime
+from enum import Enum
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", "games")
-print(f"GAME_DATA_DIR: {GAME_DATA_DIR}")
+os.chdir(GAME_DATA_DIR)
+
+# Task status enum
+class TaskStatus(Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 app = FastAPI(
     title="Soccer Director HTTP API",
@@ -30,13 +43,88 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global task management
+tasks = {}
+current_task = None
+task_lock = threading.Lock()
+
+class CancellationFlag:
+    """用于检查任务是否被取消的标志"""
+    def __init__(self):
+        self._cancelled = False
+        self._lock = threading.Lock()
+    
+    def cancel(self):
+        with self._lock:
+            self._cancelled = True
+    
+    def is_cancelled(self):
+        with self._lock:
+            return self._cancelled
+
+def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
+    """Background task to make video"""
+    try:
+        with task_lock:
+            if current_task != game_id:
+                return
+            tasks[game_id]["status"] = TaskStatus.RUNNING.value
+            tasks[game_id]["started_at"] = datetime.now().isoformat()
+        
+        # Load game data
+        game = Game(game_id, yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8")))
+        
+        # Analyze events
+        analyzer = EventAnalyzer(game)
+        analyzer.analyze()
+        
+        # Check if task was cancelled
+        if cancellation_flag.is_cancelled():
+            with task_lock:
+                tasks[game_id]["status"] = TaskStatus.CANCELLED.value
+                tasks[game_id]["completed_at"] = datetime.now().isoformat()
+                if current_task == game_id:
+                    current_task = None
+            return
+        
+        # Edit video with cancellation support
+        editor = Editor(game, cancellation_flag)
+        editor.edit()
+        
+        # Mark as completed
+        with task_lock:
+            if current_task == game_id:
+                tasks[game_id]["status"] = TaskStatus.COMPLETED.value
+                tasks[game_id]["completed_at"] = datetime.now().isoformat()
+                current_task = None
+                
+    except InterruptedError as e:
+        # Handle cancellation
+        with task_lock:
+            tasks[game_id]["status"] = TaskStatus.CANCELLED.value
+            tasks[game_id]["error"] = str(e)
+            tasks[game_id]["completed_at"] = datetime.now().isoformat()
+            if current_task == game_id:
+                current_task = None
+    except Exception as e:
+        with task_lock:
+            tasks[game_id]["status"] = TaskStatus.FAILED.value
+            tasks[game_id]["error"] = str(e)
+            tasks[game_id]["completed_at"] = datetime.now().isoformat()
+            if current_task == game_id:
+                current_task = None
+
 @app.get("/")
 def root():
     return {"message": "Soccer Director HTTP API is running"}
 
+@app.get("/games")
+async def get_games():
+    return {"games": [game.split('.')[1] for game in os.listdir(GAME_DATA_DIR) if game.startswith('game.') and game.endswith('.yaml')]}
+
 @app.post("/game")
 async def create_game(game_obj: dict):
-    save_path = os.path.join(GAME_DATA_DIR, game_obj['id'] + '.yaml')
+    save_path = os.path.join(GAME_DATA_DIR, 'game.' + game_obj['id'] + '.yaml')
     if os.path.exists(save_path):
         raise HTTPException(status_code=400, detail="Game already exists")
 
@@ -49,30 +137,24 @@ async def create_game(game_obj: dict):
 @app.get("/game/{id}")
 async def get_game(id: str):
     print(f"get_game: {id}")
-    save_path = os.path.join(GAME_DATA_DIR, id + '.yaml')
+    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml')
     with open(save_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 @app.post("/game/{id}/events")
-async def save_events(id: str, events: str):
+async def save_events(id: str, events: list):
+    events = [Event.from_dict(event) for event in events]
     save_path = os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv')
-    with open(save_path, "w", encoding="utf-8") as f:
-        f.write(events)
 
-    try:
-        Event.load_from_csv(save_path)
-    except Exception as e:
-        print(f"Error loading events: {e}")
-        os.remove(save_path)
-        return {"id": id, "saved": False}
+    Event.save_to_csv(save_path, events)
 
     return {"id": id, "saved": True}
 
 @app.get("/game/{id}/events")
 async def get_events(id: str):
     save_path = os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv')
-    with open(save_path, "r", encoding="utf-8") as f:
-        return {"events": f.read()}
+    csv_events = Event.load_from_csv(save_path)
+    return {"events": [event.to_dict() for event in csv_events]}
 
 @app.post("/game/{id}/analyze")
 async def analyze_game(id: str):
@@ -106,14 +188,99 @@ async def save_comment(id: str, index: int, comment_obj: dict):
 
 @app.post("/game/{id}/make")
 async def make_video(id: str):
-    game = Game(id, yaml.safe_load(open(os.path.join(GAME_DATA_DIR, id + '.yaml'), "r", encoding="utf-8")))
-    editor = Editor(game)
-    editor.edit()
-    return {"id": id, "saved": True}
+    with task_lock:
+        # Check if there's already a task running
+        if current_task is not None:
+            raise HTTPException(status_code=409, detail=f"Another task is already running for game: {current_task}")
+        
+        # Check if this game already has a task
+        if id in tasks and tasks[id]["status"] in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
+            raise HTTPException(status_code=409, detail=f"Task for game {id} is already {tasks[id]['status']}")
+        
+        # Create new task with cancellation flag
+        current_task = id
+        cancellation_flag = CancellationFlag()
+        tasks[id] = {
+            "status": TaskStatus.PENDING.value,
+            "created_at": datetime.now().isoformat(),
+            "started_at": None,
+            "completed_at": None,
+            "error": None,
+            "cancellation_flag": cancellation_flag
+        }
+    
+    # Start the task in a separate thread
+    thread = threading.Thread(target=make_video_task, args=(id, cancellation_flag))
+    thread.daemon = True
+    thread.start()
+    
+    return {"id": id, "task_id": id, "status": TaskStatus.PENDING.value, "message": "Video making task started"}
+
+@app.get("/game/{id}/task/status")
+async def get_task_status(id: str):
+    """Get the status of a video making task"""
+    with task_lock:
+        if id not in tasks:
+            raise HTTPException(status_code=404, detail=f"No task found for game {id}")
+        
+        task_info = tasks[id].copy()
+        # Remove cancellation_flag as it's not JSON serializable
+        task_info.pop("cancellation_flag", None)
+        return {
+            "id": id,
+            "task_id": id,
+            **task_info
+        }
+
+@app.get("/tasks")
+async def get_all_tasks():
+    """Get status of all tasks"""
+    with task_lock:
+        # Remove cancellation_flag from all tasks as it's not JSON serializable
+        serializable_tasks = {}
+        for task_id, task_info in tasks.items():
+            task_copy = task_info.copy()
+            task_copy.pop("cancellation_flag", None)
+            serializable_tasks[task_id] = task_copy
+        
+        return {
+            "current_task": current_task,
+            "tasks": serializable_tasks
+        }
+
+@app.post("/game/{id}/task/cancel")
+async def cancel_task(id: str):
+    """Cancel a running or pending task"""
+    with task_lock:
+        if id not in tasks:
+            raise HTTPException(status_code=404, detail=f"No task found for game {id}")
+        
+        task_status = tasks[id]["status"]
+        
+        # Check if task can be cancelled
+        if task_status in [TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value]:
+            raise HTTPException(status_code=400, detail=f"Task for game {id} is already {task_status} and cannot be cancelled")
+        
+        # Cancel the task using cancellation flag
+        if "cancellation_flag" in tasks[id]:
+            tasks[id]["cancellation_flag"].cancel()
+        
+        # Update task status
+        if current_task == id:
+            current_task = None
+        
+        tasks[id]["status"] = TaskStatus.CANCELLED.value
+        tasks[id]["completed_at"] = datetime.now().isoformat()
+        
+        return {
+            "id": id,
+            "task_id": id,
+            "status": TaskStatus.CANCELLED.value,
+            "message": f"Task for game {id} has been cancelled"
+        }
 
 @app.post("/game/{id}/clean")
 async def clean_game(id: str):
-    os.remove(os.path.join(GAME_DATA_DIR, id + '.yaml'))
     os.remove(os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv'))
     os.remove(os.path.join(GAME_DATA_DIR, 'game.' + id + '.pkl'))
     os.remove(os.path.join(GAME_DATA_DIR, 'highlights.' + id + '.mp4'))

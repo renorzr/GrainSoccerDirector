@@ -93,5 +93,18 @@ class Event:
         tags = [Tag[s] for s in tag_str.split(',')] if tag_str else []
         return cls(obj.get('id'), EventType[obj['type']], obj['time'], obj.get('team'), obj.get('player'), obj.get('desc'), tags)
 
+    def to_dict(self):
+        """Convert Event object to JSON-serializable dictionary"""
+        return {
+            'id': self.id,
+            'type': self.type.name,
+            'time': format_time(self.time),
+            'team': self.team,
+            'player': self.player,
+            'desc': self.desc,
+            'tags': ','.join([tag.name for tag in self.tags]) if self.tags else None,
+            'replay_time': format_time(self.replay_time) if self.replay_time else None
+        }
+
     def __repr__(self):
         return f'id: {self.id}, type: {self.type}, time: {format_time(self.time)}, team: {self.team}, player: {self.player}, desc: {self.desc}, tags: {self.tags}'
