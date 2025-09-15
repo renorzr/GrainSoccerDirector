@@ -574,6 +574,175 @@ body {
     border-radius: 5px;
 }
 
+.video-input-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.video-input-container input[type="text"] {
+    flex: 1;
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+}
+
+#uploadProgress {
+    margin-top: 10px;
+}
+
+#uploadStatus {
+    font-size: 0.9rem;
+    color: #666;
+    margin-top: 5px;
+    display: block;
+}
+
+/* 视频管理样式 */
+.video-management-container {
+    padding: 20px;
+}
+
+.video-management-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.video-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.video-list-container {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.video-list {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.video-item {
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #e9ecef;
+    transition: background-color 0.3s ease;
+}
+
+.video-item:hover {
+    background-color: #f8f9fa;
+}
+
+.video-item:last-child {
+    border-bottom: none;
+}
+
+.video-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.video-name {
+    font-weight: 600;
+    color: #333;
+    font-size: 1rem;
+}
+
+.video-meta {
+    font-size: 0.85rem;
+    color: #666;
+    display: flex;
+    gap: 15px;
+}
+
+.video-actions-item {
+    display: flex;
+    gap: 8px;
+}
+
+.video-actions-item .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+}
+
+.video-preview {
+    width: 80px;
+    height: 45px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    color: #666;
+    font-size: 0.8rem;
+    border: 1px solid #e9ecef;
+}
+
+.video-preview:hover {
+    background: #e9ecef;
+    cursor: pointer;
+}
+
+.upload-progress {
+    margin: 15px 0;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    border: 1px solid #e9ecef;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-style: italic;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+.empty-state h4 {
+    margin-bottom: 10px;
+    color: #999;
+}
+
+.empty-state p {
+    font-size: 0.9rem;
+    margin-bottom: 20px;
+}
+
 .match-actions {
     display: flex;
     gap: 15px;
@@ -743,6 +912,74 @@ body {
     display: block;
 }
 
+/* 视频预览模态框样式 */
+.video-modal-content {
+    max-width: 900px;
+    width: 95%;
+    margin: 2% auto;
+}
+
+.video-container {
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+#previewVideo {
+    width: 100%;
+    height: auto;
+    max-height: 70vh;
+    display: block;
+}
+
+.video-controls {
+    background: #f8f9fa;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #e9ecef;
+}
+
+.video-info {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9rem;
+    color: #666;
+    font-weight: 500;
+}
+
+.video-control-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.video-control-buttons .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.video-control-buttons .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 视频播放器自定义样式 */
+#previewVideo::-webkit-media-controls-panel {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+#previewVideo::-webkit-media-controls-play-button,
+#previewVideo::-webkit-media-controls-pause-button {
+    background-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
     .container {
@@ -796,5 +1033,28 @@ body {
 
     .teams-edit-grid {
         grid-template-columns: 1fr;
+    }
+
+    /* 视频预览响应式 */
+    .video-modal-content {
+        width: 98%;
+        margin: 1% auto;
+        padding: 15px;
+    }
+
+    .video-controls {
+        flex-direction: column;
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    .video-control-buttons {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .video-control-buttons .btn {
+        flex: 1;
+        min-width: 80px;
     }
 }

@@ -1,6 +1,8 @@
 import dotenv
 dotenv.load_dotenv()
 
+import traceback
+import re
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,10 +17,15 @@ from event_analyzer import EventAnalyzer
 from editor import Editor
 import asyncio
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
+from storage import list_objects, get_object_url, get_upload_url, delete_object
+import uuid
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
+STORAGE_FOLDER = os.getenv("STORAGE_FOLDER", "games/")
+VIDEO_REGEX = os.getenv("VIDEO_REGEX", r"\/(\.+\).mp4$")
+VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv").split(",")
 
 # Task status enum
 class TaskStatus(Enum):
@@ -52,7 +59,6 @@ current_task = None
 task_lock = threading.Lock()
 
 class CancellationFlag:
-    """用于检查任务是否被取消的标志"""
     def __init__(self):
         self._cancelled = False
         self._lock = threading.Lock()
@@ -65,6 +71,22 @@ class CancellationFlag:
         with self._lock:
             return self._cancelled
 
+def load_game_data(game_id: str):
+    game_data = yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8"))
+    if not game_data.get('main_video'):
+        game_data['main_video'] = get_object_url(STORAGE_FOLDER + 'source.' + game_id + '.mp4')
+    elif game_data.get('main_video').startswith('storage://'):
+        key = game_data.get('main_video').split('storage://')[1]
+        game_data['main_video'] = get_object_url(STORAGE_FOLDER + key)
+    
+    if not game_data.get('logo_video'):
+        game_data['logo_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'logo.mp4')
+
+    if not game_data.get('scoreboard'):
+        game_data['scoreboard'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'scoreboard.yaml')
+
+    return game_data
+
 def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
     """Background task to make video"""
     global current_task
@@ -76,7 +98,7 @@ def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
             tasks[game_id]["started_at"] = datetime.now().isoformat()
         
         # Load game data
-        game = Game(game_id, yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8")), GAME_DATA_DIR)
+        game = Game(game_id, load_game_data(game_id), GAME_DATA_DIR)
         
         # Analyze events
         analyzer = EventAnalyzer(game)
@@ -111,6 +133,8 @@ def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
             if current_task == game_id:
                 current_task = None
     except Exception as e:
+        # print stack trace
+        print(traceback.format_exc())
         with task_lock:
             tasks[game_id]["status"] = TaskStatus.FAILED.value
             tasks[game_id]["error"] = str(e)
@@ -174,7 +198,7 @@ async def get_events(id: str):
 
 @app.post("/game/{id}/analyze")
 async def analyze_game(id: str):
-    game = Game(id, yaml.safe_load(open(os.path.join(GAME_DATA_DIR, id + '.yaml'), "r", encoding="utf-8")))
+    game = Game(id, load_game_data(id), GAME_DATA_DIR)
     analyzer = EventAnalyzer(game)
     analyzer.analyze()
     return analyzer.game.comments
@@ -306,6 +330,34 @@ async def clean_game(id: str):
     os.remove(os.path.join(GAME_DATA_DIR, 'game.' + id + '.mp4'))
     return {"id": id, "cleaned": True}
 
+@app.post("/upload/presigned-url/{key}")
+async def get_presigned_upload_url(key: str):
+    return {"upload_url": get_upload_url(STORAGE_FOLDER + key)}
+
+@app.post("/upload/{key}")
+async def upload_file(key: str, file: UploadFile = File(...)):
+    if not key.lower().endswith(tuple(VIDEO_EXTENSIONS)):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    with open(os.path.join(GAME_DATA_DIR, key), "wb") as f:
+        f.write(await file.read())
+    return {"key": key, "uploaded": True}
+
+@app.get("/videos")
+async def get_videos():
+    return {"videos": [{'name': filename, 'size': os.path.getsize(os.path.join(GAME_DATA_DIR, filename)), 'last_modified': os.path.getmtime(os.path.join(GAME_DATA_DIR, filename)) * 1000, 'access_url': f'/video/{filename}'} for filename in os.listdir(GAME_DATA_DIR) if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
+
+@app.get("/video/{filename}")
+async def get_video(filename: str):
+    if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    return FileResponse(os.path.join(GAME_DATA_DIR, filename))
+
+@app.delete("/video/{filename}")
+async def delete_video(filename: str):
+    if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+    os.remove(os.path.join(GAME_DATA_DIR, filename))
+    return {"filename": filename, "deleted": True}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,12 +1,10 @@
 import subprocess
 import time
 import os
-import dashscope
 import hashlib
 from fish_audio_sdk import Session, TTSRequest, Prosody
 
 VOICE_DIR = 'voices'
-dashscope.api_key=os.getenv("DASHSCOPE_API_KEY")
 session = Session(os.getenv('FISH_AUDIO_API_KEY'))
 
 class Voicer:

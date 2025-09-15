@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+from PIL import Image, ImageFont, ImageDraw
 from moviepy import ImageClip, TextClip, CompositeVideoClip
 from utils import format_time
 
@@ -15,6 +16,7 @@ class TextProp:
         self.height = height
         self.color = color
         self.font = font
+
     @classmethod
     def from_dict(cls, obj):
         return cls(obj['left'], obj['top'], obj['width'], obj['height'], color=obj.get('color'), font=obj.get('font')) if obj is not None else None
@@ -25,6 +27,85 @@ class Scoreboard:
         self.texts = texts
         self.textprops = textprops
         self.scoreboard_img = cv2.imread(img, cv2.IMREAD_UNCHANGED)
+        self.current_scoreboard_img = None
+        self.current_scoreboard_key = None
+
+    def create_scoreboard_img(self, time, score0, score1):
+        # 创建一个图，在scoreboard_img加上时间和比分
+        # 复制scoreboard底图
+        img = self.scoreboard_img.copy()
+        # 转换为PIL图像以便绘制文字
+        if img.shape[2] == 4:
+            pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA))
+        else:
+            pil_img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+
+        draw = ImageDraw.Draw(pil_img)
+
+        # 绘制时间
+        if 'time' in self.textprops:
+            time_prop = self.textprops['time']
+            font_path = time_prop.font or f"{DEFAULT_FONT}.otf"
+            try:
+                font = ImageFont.truetype(font_path, time_prop.height)
+            except Exception:
+                font = ImageFont.load_default()
+            time_str = format_time(time)
+            draw_text(draw, time_str, time_prop)
+
+        # 绘制比分0
+        if 'score0' in self.textprops:
+            score0_prop = self.textprops['score0']
+            font_path = score0_prop.font or f"{DEFAULT_FONT}.otf"
+            try:
+                font = ImageFont.truetype(font_path, score0_prop.height)
+            except Exception:
+                font = ImageFont.load_default()
+            draw_text(draw, str(score0), score0_prop)
+
+        # 绘制比分1
+        if 'score1' in self.textprops:
+            score1_prop = self.textprops['score1']
+            font_path = score1_prop.font or f"{DEFAULT_FONT}.otf"
+            try:
+                font = ImageFont.truetype(font_path, score1_prop.height)
+            except Exception:
+                font = ImageFont.load_default()
+            draw_text(draw, str(score1), score1_prop)
+
+        if 'team0' in self.textprops:
+            team0_prop = self.textprops['team0']
+            font_path = team0_prop.font or f"{DEFAULT_FONT}.otf"
+            try:
+                font = ImageFont.truetype(font_path, team0_prop.height)
+            except Exception:
+                font = ImageFont.load_default()
+            draw_text(draw, self.texts['team0'], team0_prop)
+
+        if 'team1' in self.textprops:
+            team1_prop = self.textprops['team1']
+            font_path = team1_prop.font or f"{DEFAULT_FONT}.otf"
+            try:
+                font = ImageFont.truetype(font_path, team1_prop.height)
+            except Exception:
+                font = ImageFont.load_default()
+            draw_text(draw, self.texts['team1'], team1_prop)
+
+        if 'quarter' in self.textprops:
+            quarter_prop = self.textprops['quarter']
+            font_path = quarter_prop.font or f"{DEFAULT_FONT}.otf"
+            try:
+                font = ImageFont.truetype(font_path, quarter_prop.height)
+            except Exception:
+                font = ImageFont.load_default()
+            draw_text(draw, self.texts['quarter'], quarter_prop)
+
+        # 转回OpenCV格式以便cv2使用
+        if img.shape[2] == 4:
+            result_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGBA2BGRA)
+        else:
+            result_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        return result_img
 
 
     @classmethod
@@ -41,6 +122,7 @@ class Scoreboard:
 
 
     def render_frame(self, frame, time, score0, score1):
+        time = int(time)
         # If scoreboard image has alpha, blend it onto the frame
         sh, sw = self.scoreboard_img.shape[:2]
         fh, fw = frame.shape[:2]
@@ -49,40 +131,28 @@ class Scoreboard:
         x_offset = (fw - sw) // 2
         y_offset = 0
 
-        # Prepare overlay
-        overlay = frame
-        # If scoreboard has alpha channel, blend it
-        if self.scoreboard_img.shape[2] == 4:
-            alpha_s = self.scoreboard_img[:, :, 3] / 255.0
+        self.update_scoreboard_img(time, score0, score1)
+        if self.current_scoreboard_img.shape[2] == 4:
+            alpha_s = self.current_scoreboard_img[:, :, 3] / 255.0
             alpha_l = 1.0 - alpha_s
             for c in range(0, 3):
-                overlay[y_offset:y_offset+sh, x_offset:x_offset+sw, c] = (
-                    alpha_s * self.scoreboard_img[:, :, c] +
-                    alpha_l * overlay[y_offset:y_offset+sh, x_offset:x_offset+sw, c]
+                frame[y_offset:y_offset+sh, x_offset:x_offset+sw, c] = (
+                    alpha_s * self.current_scoreboard_img[:, :, c] +
+                    alpha_l * frame[y_offset:y_offset+sh, x_offset:x_offset+sw, c]
                 )
         else:
-            overlay[y_offset:y_offset+sh, x_offset:x_offset+sw] = self.scoreboard_img
+            frame[y_offset:y_offset+sh, x_offset:x_offset+sw] = self.current_scoreboard_img
+        return frame
 
-        # Draw scores
-        overlay = draw_text(overlay, score0, self.textprops.get('score0'))
-        overlay = draw_text(overlay, score1, self.textprops.get('score1'))
-
-        # Draw other texts
-        for key, text in self.texts.items():
-            if key in ['score0', 'score1']:
-                continue
-            textprop = self.textprops.get(key)
-            overlay = draw_text(overlay, text, textprop)
-
-        # Draw time if needed
-        time_textprop = self.textprops.get('time')
-        if time_textprop is not None:
-            overlay = draw_text(overlay, format_time(time, 0), time_textprop)
-
-        return overlay
+    def update_scoreboard_img(self, time, score0, score1):
+        key = f'{time}_{score0}_{score1}'
+        if key == self.current_scoreboard_key:
+            return
+        self.current_scoreboard_img = self.create_scoreboard_img(time, score0, score1)
+        self.current_scoreboard_key = key
 
 # Draw texts (score0, score1, and others)
-def draw_text(img, text, textprop):
+def draw_text(draw, text, textprop):
     if textprop is None:
         return
 
@@ -95,15 +165,9 @@ def draw_text(img, text, textprop):
         except Exception:
             pass
 
-    x, y = int(textprop.left + x_offset), int(textprop.top + y_offset + textprop.height)
-    fontpath = "./simsun.ttc"
-    font = ImageFont.truetype(fontpath, 32)
-    img_pil = Image.fromarray(img)
-    draw = ImageDraw.Draw(img_pil)
-    draw.text((50, 80),  text, font = font, fill = (color[0], color[1], color[2], 255))
-    img = np.array(img_pil)
-
-    return img
+    x, y = int(textprop.left), int(textprop.top)
+    font = ImageFont.truetype("C:\\Users\\frien\\workplace\\soccer-director\\fonts\\SourceHanSansSC-Regular.otf", textprop.height)
+    draw.text((x, y),  str(text), font=font, fill = (color[0], color[1], color[2], 255))
 
 
 if __name__ == '__main__':
@@ -112,7 +176,7 @@ if __name__ == '__main__':
             'title': 'Soccer Match',
             'team0': '银杏',
             'team1': '樱花',
-            'quarter': '第2节',
+            'quarter': '第1节',
         },
         {
         'img': '../soccer-demo/scoreboard.png',
@@ -154,4 +218,7 @@ if __name__ == '__main__':
         },
     })
 
-    b.render(60, 10, 0, 0).preview()
+    img = b.update_scoreboard_img(60, 10, 0)
+    cv2.imshow("img", img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()

@@ -79,11 +79,11 @@ class Editor:
         print(f"found {len(replay_events)} replay events")
         self.calculate_logo_times(replay_events)
 
-        cap = cv2.VideoCapture(self.game.main_video)
+        cap = cv2.VideoCapture(os.path.join(self.game.directory, self.game.main_video))
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        out = cv2.VideoWriter(os.path.join(self.game.directory, TEMP_VIDEO_NAME), cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+        out = cv2.VideoWriter(os.path.join(self.game.directory, TEMP_VIDEO_NAME), cv2.VideoWriter_fourcc(*'vp80'), fps, (width, height))
         replay_frames = []
         replay_time = None
         processing_replay_event = None
@@ -145,7 +145,7 @@ class Editor:
 
         print(f"creating output audio {TEMP_AUDIO_NAME}")
         self.voicer.make_voice()
-        audio_clips = [VideoFileClip(self.game.main_video).audio]
+        audio_clips = [VideoFileClip(os.path.join(self.game.directory, self.game.main_video)).audio]
         last_comment = None
         for comment in self.game.comments:
             if not comment.text:
@@ -218,7 +218,6 @@ class Editor:
                 alpha = 0
 
             cv2.addWeighted(frame, alpha, logo_frame, 1 - alpha, 0, frame)
-            cv2.putText(frame, f"logo time: {logo_time:.2f} frame: {logo_frame_index}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
 
     # 计算重放片段的时间
     def calculate_replay_times(self):
