@@ -35,3 +35,13 @@ def format_time(seconds, decimal_places=1, use_separator=True):
     width = decimal_places + 3  # 3 = 2 (整数位) + 1 (小数点)
     return f'{minutes:02d}{sep}{seconds:0{width}.{decimal_places}f}'.replace('.', dot)
 
+def load_game_data(game_id: str, segment: int):
+    save_path = os.path.join(GAME_DATA_DIR, 'game.' + game_id + '-' + str(segment) + '.pkl')
+    with open(save_path, 'rb') as f:
+        game_data = pickle.load(f)
+    return game_data
+
+def save_game_data(game_id: str, segment: int, game_data: dict):
+    save_path = os.path.join(GAME_DATA_DIR, 'game.' + game_id + '-' + str(segment) + '.pkl')
+    with open(save_path, 'wb') as f:
+        pickle.dump(game_data, f)

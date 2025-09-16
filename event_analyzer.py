@@ -5,6 +5,7 @@ from comment import Comment
 from ai import ChatAI
 from event import EventType, Tag
 from deadball import Deadball
+from utils import save_game_data
 
 IDLE_COMMENT_TIME = 30
 BATCH_SIZE = 10
@@ -12,28 +13,31 @@ BATCH_SIZE = 10
 # 事件分析器
 class EventAnalyzer:
     # 初始化事件分析器
-    def __init__(self, game):
+    def __init__(self, game, segment):
         self.game = game
+        self.segment = segment
         self.current_deadball = None
-        self.pkl_file = os.path.join(self.game.directory, f'game.{self.game.game_id}.pkl')
+        self.score_updates = []
+        self.deadballs = []
+        self.scores = [0, 0]
+
+    def goal_scored(self, time, team=None):
+        if team is not None:
+            self.scores[team] += 1
+        self.score_updates.append(ScoreUpdate(time, self.scores[0], self.scores[1]))
 
     # 分析事件(生成解说词, 更新比分, 更新死球状态)
     def analyze(self):
         if os.path.exists(self.pkl_file):
-            with open(self.pkl_file, 'rb') as f:
-                game_data = pickle.load(f)
-                comments = self.game.comments = game_data['comments']
-                self.game.score_updates = game_data['score_updates']
-                self.game.deadballs = game_data['deadballs']
+            print(f"game data already exists for {self.game.game_id}-{self.segment}")
             return
-
-        comments = self.game.comments = []
-        self.game.deadballs = []
+        
+        comments = []
         
         game_info = f"比赛名称：{self.game.name}\n"
         game_info += f"{self.game.teams[0].color}队服: {self.game.teams[0].name}队\n"
         game_info += f"{self.game.teams[1].color}队服: {self.game.teams[1].name}队\n"
-        game_info += f"目前是第{self.game.quarter}节，比分是{self.game.teams[0].score}:{self.game.teams[1].score}\n" if self.game.quarter and self.game.quarter > 1 else ""
+        game_info += f"目前是第{self.segment}节，比分是{self.game.teams[0].score}:{self.game.teams[1].score}\n" if self.segment and self.segment > 1 else ""
         game_info += f"其它信息：{self.game.description}\n" if self.game.description else ""
         game_info += f"其它要求：{self.game.comment_requirement}\n" if self.game.comment_requirement else ""
 
@@ -65,13 +69,13 @@ class EventAnalyzer:
                 intro_time = event.time - 30 if event.time - 30 > 0 else 0
                 comments.append(Comment(intro_time, chat_ai.chat("Intro"), 'event', event.id, event.type.level))
             elif event.type == EventType.End:
-                if self.game.quarter < 4:
+                if self.segment < 4:
                     comments.append(Comment(event.time, chat_ai.chat("EndQuater"),'event', event.id, event.type.level))
                     continue
             elif event.type == EventType.Goal:
                 comments.append(Comment(event.time, shoot_text(), 'event', event.id, event.type.level))
                 event.time += 1
-                self.game.update_score(event.time, event.team, self.game.teams[event.team].score + 1)
+                self.goal_scored(event.time, event.team)
                 event.desc = (event.desc or '') + f", 比分被改写为{self.game.teams[0].score}:{self.game.teams[1].score}"
             elif event.type == EventType.Miss:
                 comments.append(Comment(event.time, shoot_text(), 'event', event.id, event.type.level))
@@ -84,8 +88,7 @@ class EventAnalyzer:
 
             last_comment_time = event.time
 
-        with open(self.pkl_file, 'wb') as f:
-            pickle.dump({'comments': comments, 'score_updates': self.game.score_updates, 'deadballs': self.game.deadballs}, f)
+        save_game_data(self.game.game_id, self.segment, {'comments': comments, 'score_updates': self.score_updates, 'deadballs': self.deadballs})
 
     # 生成事件解说词
     def event_comment(self, chat_ai, event):
@@ -102,7 +105,7 @@ class EventAnalyzer:
             self.current_deadball = Deadball(event.time)
         elif Tag.Liveball in event.tags and self.current_deadball is not None:
             self.current_deadball.close(event.time)
-            self.game.deadballs.append(self.current_deadball)
+            self.deadballs.append(self.current_deadball)
             self.current_deadball = None
 
 

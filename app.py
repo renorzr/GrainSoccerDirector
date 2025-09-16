@@ -12,7 +12,6 @@ import logging
 from utils import format_time
 import argparse
 import mark
-from clips import create_goal_clips
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +45,13 @@ edit: 编辑解说文字
         help="比赛配置文件的路径（YAML格式）",
         metavar="game"
     )
+    parser.add_argument(
+        "segment",
+        type=int,
+        help="比赛节数",
+        metavar="segment",
+        default=1
+    )
     args = parser.parse_args()
 
     directory, filename = os.path.split(args.game)
@@ -59,37 +65,34 @@ edit: 编辑解说文字
         game = Game(game_id, yaml.safe_load(f), directory)
     
     if args.action == "mark":
-        mark.mark(game.main_video, f'events.{game_id}.csv')
+        mark.mark(game.videos[args.segment - 1], f'events.{game_id}-{args.segment}.csv')
         return 1
 
 
-    analyzer = EventAnalyzer(game)
+    analyzer = EventAnalyzer(game, args.segment)
     analyzer.analyze()
 
     start = time.time()
 
     if args.action == "preview":
-        editor = Editor(game)
+        editor = Editor(game, args.segment)
         editor.preview()
     elif args.action == "make":
-        editor = Editor(game)
+        editor = Editor(game, args.segment)
         editor.edit()
     elif args.action == "clean":
         confirm = input("确定要删除该比赛生成的文件吗？(y/n): ").lower()
         if confirm == "y":
-            os.remove(f"game.{game.game_id}.mp4")
-            os.remove(f"highlights.{game.game_id}.mp4")
-            os.remove(f"logo.{game.game_id}.mp4")
-            os.remove(f"game.{game.game_id}.pkl")
+            os.remove(f"game.{game.game_id}-{args.segment}.mp4")
+            os.remove(f"highlights.{game.game_id}-{args.segment}.mp4")
+            os.remove(f"game.{game.game_id}-{args.segment}.pkl")
             print(f"Game {game.game_id} cleaned")
     elif args.action == "analyze":
         # no more action needed
         return 0
     elif args.action == "edit":
-        edit(f"game.{game.game_id}.pkl")
+        edit(f"game.{game.game_id}-{args.segment}.pkl")
         return 0
-    elif args.action == "goals":
-        create_goal_clips(game)
     else:
         print("unknown action:", args.action)
         return 1

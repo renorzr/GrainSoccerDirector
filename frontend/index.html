@@ -57,15 +57,6 @@
                                     <label>比赛名称:</label>
                                     <input type="text" id="matchName" class="editable-input" readonly>
                                 </div>
-                                <div class="info-item">
-                                    <label>比赛节次:</label>
-                                    <select id="matchQuarter" class="editable-select" disabled>
-                                        <option value="1">第1节</option>
-                                        <option value="2">第2节</option>
-                                        <option value="3">第3节</option>
-                                        <option value="4">第4节</option>
-                                    </select>
-                                </div>
                                 <div class="info-item full-width">
                                     <label>比赛描述:</label>
                                     <textarea id="matchDescription" class="editable-textarea" rows="2"
@@ -143,20 +134,12 @@
                             <h3>🎥 视频信息</h3>
                             <div class="video-info">
                                 <div class="info-item">
-                                    <label>主视频:</label>
-                                    <div class="video-selection-container">
-                                        <select id="mainVideoSelect" class="editable-select" disabled>
-                                            <option value="">请选择主视频</option>
-                                        </select>
-                                        <div class="video-url-container" style="display: none;">
-                                            <input type="url" id="mainVideoUrl" class="video-url-input editable-input"
-                                                readonly>
-                                            <button class="btn btn-secondary btn-sm"
-                                                onclick="copyVideoUrl()">复制链接</button>
-                                            <button class="btn btn-primary btn-sm"
-                                                onclick="previewMainVideo()">预览视频</button>
-                                        </div>
-                                    </div>
+                                    <label>比赛节数:</label>
+                                    <input type="number" id="matchSegments" class="editable-input" min="1" max="10"
+                                        value="4" readonly>
+                                </div>
+                                <div id="segmentsVideoContainer">
+                                    <!-- 动态生成的节数视频选择框 -->
                                 </div>
                             </div>
                         </div>
@@ -184,6 +167,17 @@
 
                 <!-- 事件编辑 -->
                 <div id="gameEvents" class="tab-panel">
+                    <div class="events-header">
+                        <div class="segment-selector">
+                            <label>选择节数:</label>
+                            <select id="eventSegmentSelect" onchange="switchEventSegment()">
+                                <option value="1">第1节</option>
+                                <option value="2">第2节</option>
+                                <option value="3">第3节</option>
+                                <option value="4">第4节</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="video-container">
                         <video id="eventVideo" controls preload="metadata" style="width: 100%">
                             您的浏览器不支持视频播放。
@@ -210,6 +204,17 @@
                 <!-- 视频制作 -->
                 <div id="gameVideo" class="tab-panel">
                     <h3>视频制作</h3>
+                    <div class="video-generation-header">
+                        <div class="segment-selector">
+                            <label>选择节数:</label>
+                            <select id="videoSegmentSelect">
+                                <option value="1">第1节</option>
+                                <option value="2">第2节</option>
+                                <option value="3">第3节</option>
+                                <option value="4">第4节</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <button class="btn btn-primary" onclick="startVideoMaking()">开始制作视频</button>
                         <button class="btn btn-danger" onclick="cancelVideoMaking()">取消制作</button>
@@ -224,6 +229,17 @@
                 <!-- 评论编辑 -->
                 <div id="gameComments" class="tab-panel">
                     <h3>评论编辑</h3>
+                    <div class="comments-header">
+                        <div class="segment-selector">
+                            <label>选择节数:</label>
+                            <select id="commentSegmentSelect" onchange="switchCommentSegment()">
+                                <option value="1">第1节</option>
+                                <option value="2">第2节</option>
+                                <option value="3">第3节</option>
+                                <option value="4">第4节</option>
+                            </select>
+                        </div>
+                    </div>
                     <div id="commentsList">
                         <!-- 评论列表将在这里动态加载 -->
                     </div>
@@ -279,15 +295,17 @@
                     <input type="text" id="gameName" required>
                 </div>
                 <div class="form-group">
-                    <label for="mainVideo">主视频文件:</label>
-                    <div class="video-input-container">
-                        <select id="mainVideo" required>
-                            <option value="">请选择主视频</option>
-                        </select>
-                        <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
-                        <button type="button" class="btn btn-secondary btn-sm"
-                            onclick="document.getElementById('videoFileInput').click()">上传新视频</button>
+                    <label for="gameSegments">比赛节数:</label>
+                    <input type="number" id="gameSegments" min="1" max="10" value="4" required>
+                </div>
+                <div class="form-group">
+                    <label>视频文件:</label>
+                    <div id="createGameVideosContainer">
+                        <!-- 动态生成的节数视频选择框 -->
                     </div>
+                    <input type="file" id="videoFileInput" accept="video/*" style="display: none;">
+                    <button type="button" class="btn btn-secondary btn-sm"
+                        onclick="document.getElementById('videoFileInput').click()">上传新视频</button>
                     <div id="uploadProgress" style="display: none;">
                         <div class="progress-bar">
                             <div class="progress-fill" id="uploadProgressFill"></div>

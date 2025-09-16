@@ -1,5 +1,5 @@
 img: resources/scoreboard.png
-quarter:
+segment:
   left: 170
   top: 70
   width: 30

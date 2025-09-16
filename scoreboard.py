@@ -91,14 +91,14 @@ class Scoreboard:
                 font = ImageFont.load_default()
             draw_text(draw, self.texts['team1'], team1_prop)
 
-        if 'quarter' in self.textprops:
-            quarter_prop = self.textprops['quarter']
-            font_path = quarter_prop.font or f"{DEFAULT_FONT}.otf"
+        if 'segment' in self.textprops:
+            segment_prop = self.textprops['segment']
+            font_path = segment_prop.font or f"{DEFAULT_FONT}.otf"
             try:
-                font = ImageFont.truetype(font_path, quarter_prop.height)
+                font = ImageFont.truetype(font_path, segment_prop.height)
             except Exception:
                 font = ImageFont.load_default()
-            draw_text(draw, self.texts['quarter'], quarter_prop)
+            draw_text(draw, self.texts['segment'], segment_prop)
 
         # 转回OpenCV格式以便cv2使用
         if img.shape[2] == 4:
@@ -176,11 +176,11 @@ if __name__ == '__main__':
             'title': 'Soccer Match',
             'team0': '银杏',
             'team1': '樱花',
-            'quarter': '第1节',
+            'segment': '第1节',
         },
         {
         'img': '../soccer-demo/scoreboard.png',
-        'quarter': {
+        'segment': {
             'left': 170,
             'top': 70,
             'width': 30,

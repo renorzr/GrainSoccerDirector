@@ -22,7 +22,7 @@ TEMP_AUDIO_NAME = 'temp.aac'
 # 剪辑器
 class Editor:
     # 初始化剪辑器
-    def __init__(self, game, cancellation_flag=None):
+    def __init__(self, game, segment, cancellation_flag=None):
         self.game = game
         self.voicer = Voicer(game)
         self.logo_clips = []
@@ -32,7 +32,28 @@ class Editor:
         self.current_score = None
         self.logo_times = None
         self.cancellation_flag = cancellation_flag  # 用于检查是否被取消
+        self.scoreboard = Scoreboard.from_dict(
+            {'title': self.game.name, 'team0': self.game.teams[0].name, 'team1': self.game.teams[1].name, 'segment': segment}, 
+            self.game.scoreboard_props)
         self.load_logo_video()
+
+        game_data = load_game_data(self.game.game_id, self.segment)
+        self.comments = game_data['comments']
+        self.score_updates = game_data['score_updates']
+        self.deadballs = game_data['deadballs']
+        self.load_events()
+
+    def load_events(self):
+        self.events = Event.load_from_csv(os.path.join(self.game.directory, f'events.{self.game.game_id}-{self.segment}.csv'))
+
+        for event in self.events:
+            if event.type == EventType.Start:
+                self.start = event.time
+                break
+        # find the last event with type 'end'
+        for event in self.events:
+            if event.type == EventType.End:
+                self.end = event.time
     
     def load_logo_video(self):
         logo_video_cap = cv2.VideoCapture(self.game.logo_video)
@@ -48,6 +69,9 @@ class Editor:
         logo_video_cap.release()
         self.logo_video = {"fps": fps, "duration": duration, "frames": frames}
         print(f"loading logo video {self.game.logo_video} with {self.logo_video['fps']} fps and {self.logo_video['duration']} duration")
+
+    def game_video(self, segment):
+        return os.path.join(self.game.directory, self.game.videos[segment - 1])
 
     def edit(self):
         # 检查是否被取消
@@ -147,7 +171,7 @@ class Editor:
         self.voicer.make_voice()
         audio_clips = [VideoFileClip(os.path.join(self.game.directory, self.game.main_video)).audio]
         last_comment = None
-        for comment in self.game.comments:
+        for comment in self.comments:
             if not comment.text:
                 continue
             voice_path = self.voicer.get_voice(comment.text)["path"]
@@ -182,11 +206,11 @@ class Editor:
         if time < self.game.start or time > self.game.end:
             return
 
-        if len(self.game.score_updates) > 0 and time > self.game.score_updates[0].time:
-            self.current_score = self.game.score_updates.pop(0)
+        if len(self.score_updates) > 0 and time > self.score_updates[0].time:
+            self.current_score = self.score_updates.pop(0)
 
         if self.current_score is not None:
-            self.game.scoreboard.render_frame(frame, time - self.game.start, self.current_score.score0, self.current_score.score1)
+            self.scoreboard.render_frame(frame, time - self.game.start, self.current_score.score0, self.current_score.score1)
 
     def calculate_logo_times(self, replay_events):
         self.logo_times = []
@@ -229,7 +253,7 @@ class Editor:
             return []
 
         # 获取所有deadball时间段
-        deadballs = self.game.deadballs
+        deadballs = self.deadballs
         print(f"found {len(deadballs)} deadballs")
         if not deadballs:
             return []

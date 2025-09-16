@@ -120,6 +120,8 @@ function showCreateGameModal() {
     showModal('createGameModal');
     // 加载视频列表到创建比赛的视频选择框
     loadVideoListForCreateGame();
+    // 生成节数视频选择框
+    generateCreateGameVideoSelectors();
 }
 
 // 比赛管理功能
@@ -192,7 +194,6 @@ async function loadGameDetail() {
 function displayMatchDetails(gameData) {
     // 比赛基本信息
     document.getElementById('matchName').value = gameData.name || '';
-    document.getElementById('matchQuarter').value = gameData.quarter || 1;
     document.getElementById('matchDescription').value = gameData.description || '';
 
     // 队伍信息
@@ -214,8 +215,10 @@ function displayMatchDetails(gameData) {
         team1Color.style.backgroundColor = getColorValue(gameData.teams[1].color);
     }
 
-    // 视频信息 - 设置主视频选择
-    setMainVideoSelection(gameData.main_video || '');
+    // 视频信息 - 设置多节视频选择
+    const segments = gameData.segments || 4;
+    document.getElementById('matchSegments').value = segments;
+    setSegmentsVideoSelection(gameData.videos || []);
 
     // 评论要求
     document.getElementById('commentRequirement').value = gameData.comment_requirement || '';
@@ -238,7 +241,7 @@ function getColorValue(colorName) {
 }
 
 // 编辑模式功能
-function toggleEditMode() {
+async function toggleEditMode() {
     const editBtn = document.getElementById('editBtn');
     const saveBtn = document.getElementById('saveBtn');
     const cancelBtn = document.getElementById('cancelBtn');
@@ -249,14 +252,14 @@ function toggleEditMode() {
     cancelBtn.style.display = 'inline-block';
 
     // 启用所有输入框
-    enableEditMode();
+    await enableEditMode();
 }
 
-function enableEditMode() {
+async function enableEditMode() {
     // 比赛信息
     document.getElementById('matchName').readOnly = false;
-    document.getElementById('matchQuarter').disabled = false;
     document.getElementById('matchDescription').readOnly = false;
+    document.getElementById('matchSegments').readOnly = false;
 
     // 队伍信息
     document.getElementById('team0Name').readOnly = false;
@@ -272,18 +275,18 @@ function enableEditMode() {
     });
 
     // 视频和评论信息
-    document.getElementById('mainVideoSelect').disabled = false;
     document.getElementById('commentRequirement').readOnly = false;
 
-    // 加载视频列表到下拉框
-    loadVideoListForSelection();
+    // 加载视频列表到下拉框并生成节数视频选择框
+    await loadVideoListForSelection();
+    generateSegmentsVideoSelectors();
 }
 
 function disableEditMode() {
     // 比赛信息
     document.getElementById('matchName').readOnly = true;
-    document.getElementById('matchQuarter').disabled = true;
     document.getElementById('matchDescription').readOnly = true;
+    document.getElementById('matchSegments').readOnly = true;
 
     // 队伍信息
     document.getElementById('team0Name').readOnly = true;
@@ -299,8 +302,12 @@ function disableEditMode() {
     });
 
     // 视频和评论信息
-    document.getElementById('mainVideoSelect').disabled = true;
     document.getElementById('commentRequirement').readOnly = true;
+
+    // 禁用所有节数视频选择框
+    document.querySelectorAll('.segment-video-select').forEach(select => {
+        select.disabled = true;
+    });
 }
 
 function cancelEdit() {
@@ -332,11 +339,24 @@ async function saveMatchDetails() {
 
     try {
         // 收集表单数据
+        const segments = parseInt(document.getElementById('matchSegments').value) || 4;
+        const videos = [];
+
+        // 收集各节视频
+        for (let i = 1; i <= segments; i++) {
+            const videoSelect = document.getElementById(`segment${i}Video`);
+            if (videoSelect && videoSelect.value) {
+                videos.push(videoSelect.value);
+            } else {
+                videos.push('');
+            }
+        }
+
         const matchData = {
             name: document.getElementById('matchName').value,
-            quarter: parseInt(document.getElementById('matchQuarter').value),
             description: document.getElementById('matchDescription').value,
-            main_video: document.getElementById('mainVideoSelect').value,
+            segments: segments,
+            videos: videos,
             comment_requirement: document.getElementById('commentRequirement').value,
             teams: [
                 {
@@ -421,6 +441,7 @@ function previewMainVideo() {
 
 // 视频选择功能
 async function loadVideoListForSelection() {
+    console.log('loadVideoListForSelection');
     try {
         const response = await fetch(`${API_BASE}/videos`);
         if (!response.ok) {
@@ -428,10 +449,82 @@ async function loadVideoListForSelection() {
         }
 
         const data = await response.json();
-        populateVideoSelect(data.videos);
+        console.log('loadVideoListForSelection', data);
+        window.availableVideos = data.videos; // 存储视频列表供其他函数使用
     } catch (error) {
         showAlert('加载视频列表失败: ' + error.message, 'error');
     }
+}
+
+function generateSegmentsVideoSelectors() {
+    console.log('generateSegmentsVideoSelectors');
+    const segments = parseInt(document.getElementById('matchSegments').value) || 4;
+    const container = document.getElementById('segmentsVideoContainer');
+
+    container.innerHTML = '';
+
+    for (let i = 1; i <= segments; i++) {
+        const segmentDiv = document.createElement('div');
+        segmentDiv.className = 'info-item';
+        segmentDiv.innerHTML = `
+            <label>第${i}节视频:</label>
+            <div class="video-selection-container">
+                <select id="segment${i}Video" class="editable-select segment-video-select">
+                    <option value="">请选择视频</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="previewSegmentVideo(${i})">预览</button>
+            </div>
+        `;
+        container.appendChild(segmentDiv);
+
+        // 填充视频选项
+        populateSegmentVideoSelect(i);
+    }
+}
+
+function populateSegmentVideoSelect(segmentIndex) {
+    console.log('populateSegmentVideoSelect', segmentIndex);
+    const select = document.getElementById(`segment${segmentIndex}Video`);
+    console.log('select', select, window.availableVideos);
+    if (!select || !window.availableVideos) return;
+
+    // 清空现有选项（保留第一个默认选项）
+    select.innerHTML = '<option value="">请选择视频</option>' + window.availableVideos.map(video => `<option value="${video.name}">${video.name}</option>`).join('');
+
+    // 添加视频选项
+    window.availableVideos.forEach(video => {
+        const option = document.createElement('option');
+        option.value = video.name;
+        option.textContent = video.name;
+        console.log('append option', option);
+        select.appendChild(option);
+    });
+}
+
+function setSegmentsVideoSelection(videos) {
+    const segments = parseInt(document.getElementById('matchSegments').value) || 4;
+
+    // 生成节数视频选择框
+    generateSegmentsVideoSelectors();
+
+    // 设置各节视频
+    for (let i = 1; i <= segments; i++) {
+        const videoSelect = document.getElementById(`segment${i}Video`);
+        if (videoSelect && videos[i - 1]) {
+            videoSelect.value = videos[i - 1];
+        }
+    }
+}
+
+function previewSegmentVideo(segmentIndex) {
+    const videoSelect = document.getElementById(`segment${segmentIndex}Video`);
+    if (!videoSelect || !videoSelect.value) {
+        showAlert('请先选择视频', 'error');
+        return;
+    }
+
+    const videoUrl = `/video/${videoSelect.value}`;
+    showVideoPreview(videoUrl);
 }
 
 async function loadVideoListForCreateGame() {
@@ -470,15 +563,43 @@ function populateVideoSelect(videos) {
 }
 
 function populateCreateGameVideoSelect(videos) {
-    const select = document.getElementById('mainVideo');
+    window.availableVideos = videos; // 存储视频列表
+}
+
+function generateCreateGameVideoSelectors() {
+    const segments = parseInt(document.getElementById('gameSegments').value) || 4;
+    const container = document.getElementById('createGameSegmentsContainer');
+
+    container.innerHTML = '';
+
+    for (let i = 1; i <= segments; i++) {
+        const segmentDiv = document.createElement('div');
+        segmentDiv.className = 'form-group';
+        segmentDiv.innerHTML = `
+            <label>第${i}节视频:</label>
+            <select id="createSegment${i}Video" required>
+                <option value="">请选择视频</option>
+            </select>
+        `;
+        container.appendChild(segmentDiv);
+
+        // 填充视频选项
+        populateCreateSegmentVideoSelect(i);
+    }
+}
+
+function populateCreateSegmentVideoSelect(segmentIndex) {
+    const select = document.getElementById(`createSegment${segmentIndex}Video`);
+    if (!select || !window.availableVideos) return;
 
     // 清空现有选项（保留第一个默认选项）
-    select.innerHTML = '<option value="">请选择主视频</option>';
+    select.innerHTML = '<option value="">请选择视频</option>';
 
     // 添加视频选项
-    videos.forEach(video => {
+    window.availableVideos.forEach(video => {
+        console.log('populateCreateSegmentVideoSelect', video);
         const option = document.createElement('option');
-        option.value = video.access_url;
+        option.value = video.name;
         option.textContent = video.name;
         select.appendChild(option);
     });
@@ -519,6 +640,9 @@ function onVideoSelectChange() {
 }
 
 // 事件管理功能
+let currentSegment = 1;
+let allEvents = {}; // 存储所有节的事件
+
 async function loadEvents() {
     if (!currentGameId) {
         showAlert('请先选择一个比赛', 'error');
@@ -528,13 +652,30 @@ async function loadEvents() {
     try {
         const response = await fetch(`${API_BASE}/game/${currentGameId}/events`);
         const data = await response.json();
-        currentEvents = data.events;
-        const videoUrl = document.getElementById('mainVideoUrl').value;
-        document.getElementById('eventVideo').src = `/video/${videoUrl}`;
+        allEvents = data.events || {};
+        currentEvents = allEvents[currentSegment] || [];
+
+        // 设置当前节数的视频
+        switchEventSegment();
         displayEvents(currentEvents);
     } catch (error) {
         showAlert('加载事件失败: ' + error.message, 'error');
     }
+}
+
+function switchEventSegment() {
+    currentSegment = parseInt(document.getElementById('eventSegmentSelect').value);
+    currentEvents = allEvents[currentSegment] || [];
+
+    // 设置当前节数的视频
+    const videoSelect = document.getElementById(`segment${currentSegment}Video`);
+    if (videoSelect && videoSelect.value) {
+        document.getElementById('eventVideo').src = `/video/${videoSelect.value}`;
+    } else {
+        document.getElementById('eventVideo').src = '';
+    }
+
+    displayEvents(currentEvents);
 }
 
 function displayEvents(events) {
@@ -633,12 +774,15 @@ async function saveEvents() {
     }
 
     try {
+        // 更新当前节的事件
+        allEvents[currentSegment] = currentEvents;
+
         const response = await fetch(`${API_BASE}/game/${currentGameId}/events`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(currentEvents)
+            body: JSON.stringify(allEvents)
         });
 
         if (response.ok) {
@@ -733,13 +877,19 @@ async function startVideoMaking() {
         return;
     }
 
+    const segment = parseInt(document.getElementById('videoSegmentSelect').value);
+
     try {
         const response = await fetch(`${API_BASE}/game/${currentGameId}/make`, {
-            method: 'POST'
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ segment: segment })
         });
 
         if (response.ok) {
-            showAlert('视频制作任务已启动！', 'success');
+            showAlert(`第${segment}节视频制作任务已启动！`, 'success');
             loadTaskStatus();
             // 开始轮询任务状态
             startStatusPolling();
@@ -797,6 +947,9 @@ function stopStatusPolling() {
 }
 
 // 评论管理功能
+let currentCommentSegment = 1;
+let allComments = {}; // 存储所有节的评论
+
 async function loadComments() {
     if (!currentGameId) {
         showAlert('请先选择一个比赛', 'error');
@@ -806,11 +959,18 @@ async function loadComments() {
     try {
         const response = await fetch(`${API_BASE}/game/${currentGameId}/comments`);
         const data = await response.json();
-        currentComments = data;
+        allComments = data || {};
+        currentComments = allComments[currentCommentSegment] || [];
         displayComments(currentComments);
     } catch (error) {
         showAlert('加载评论失败: ' + error.message, 'error');
     }
+}
+
+function switchCommentSegment() {
+    currentCommentSegment = parseInt(document.getElementById('commentSegmentSelect').value);
+    currentComments = allComments[currentCommentSegment] || [];
+    displayComments(currentComments);
 }
 
 function displayComments(comments) {
@@ -1192,8 +1352,17 @@ document.addEventListener('DOMContentLoaded', function () {
         team1Color.style.backgroundColor = getColorValue(this.value);
     });
 
-    // 添加视频选择变化监听器
-    document.getElementById('mainVideoSelect').addEventListener('change', onVideoSelectChange);
+    // 添加节数变化监听器
+    document.getElementById('matchSegments').addEventListener('change', function () {
+        if (!this.readOnly) {
+            generateSegmentsVideoSelectors();
+        }
+    });
+
+    // 添加创建比赛节数变化监听器
+    document.getElementById('gameSegments').addEventListener('change', function () {
+        generateCreateGameVideoSelectors();
+    });
 
     // 文件上传事件监听器
     document.getElementById('videoFileInput').addEventListener('change', async function (e) {
@@ -1219,10 +1388,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const accessUrl = await uploadFile(file);
 
             if (accessUrl) {
-                // 上传成功，刷新视频列表并设置选中的视频
+                // 上传成功，刷新视频列表
                 await loadVideoListForCreateGame();
-                // 设置选中的视频为新上传的视频
-                mainVideoInput.value = accessUrl;
+                generateCreateGameVideoSelectors();
                 uploadStatus.textContent = '上传完成！';
                 uploadProgressFill.style.width = '100%';
 
@@ -1289,10 +1457,24 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('createGameForm').addEventListener('submit', async function (e) {
         e.preventDefault();
 
+        const segments = parseInt(document.getElementById('gameSegments').value) || 4;
+        const videos = [];
+
+        // 收集各节视频
+        for (let i = 1; i <= segments; i++) {
+            const videoSelect = document.getElementById(`createSegment${i}Video`);
+            if (videoSelect && videoSelect.value) {
+                videos.push(videoSelect.value);
+            } else {
+                videos.push('');
+            }
+        }
+
         const gameData = {
             id: document.getElementById('gameId').value,
             name: document.getElementById('gameName').value,
-            main_video: document.getElementById('mainVideo').value,
+            segments: segments,
+            videos: videos,
             teams: [
                 {
                     name: document.getElementById('team0Name').value,

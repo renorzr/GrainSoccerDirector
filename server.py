@@ -71,7 +71,7 @@ class CancellationFlag:
         with self._lock:
             return self._cancelled
 
-def load_game_data(game_id: str):
+def load_game_metadata(game_id: str):
     game_data = yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8"))
     if not game_data.get('main_video'):
         game_data['main_video'] = get_object_url(STORAGE_FOLDER + 'source.' + game_id + '.mp4')
@@ -87,7 +87,7 @@ def load_game_data(game_id: str):
 
     return game_data
 
-def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
+def make_video_task(game_id: str, segment: int, cancellation_flag: CancellationFlag):
     """Background task to make video"""
     global current_task
     try:
@@ -98,10 +98,10 @@ def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
             tasks[game_id]["started_at"] = datetime.now().isoformat()
         
         # Load game data
-        game = Game(game_id, load_game_data(game_id), GAME_DATA_DIR)
+        game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
         
         # Analyze events
-        analyzer = EventAnalyzer(game)
+        analyzer = EventAnalyzer(game, segment)
         analyzer.analyze()
         
         # Check if task was cancelled
@@ -114,7 +114,7 @@ def make_video_task(game_id: str, cancellation_flag: CancellationFlag):
             return
         
         # Edit video with cancellation support
-        editor = Editor(game, cancellation_flag)
+        editor = Editor(game, segment, cancellation_flag)
         editor.edit()
         
         # Mark as completed
@@ -181,8 +181,8 @@ async def get_game(id: str):
     with open(save_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
-@app.post("/game/{id}/events")
-async def save_events(id: str, events: list):
+@app.post("/game/{id}/events/{segment}")
+async def save_events(id: str, events: list, segment: int):
     events = [Event.from_dict(event) for event in events]
     save_path = os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv')
 
@@ -190,29 +190,29 @@ async def save_events(id: str, events: list):
 
     return {"id": id, "saved": True}
 
-@app.get("/game/{id}/events")
-async def get_events(id: str):
+@app.get("/game/{id}/events/{segment}")
+async def get_events(id: str, segment: int):
     save_path = os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv')
     csv_events = Event.load_from_csv(save_path)
     return {"events": [event.to_dict() for event in csv_events]}
 
-@app.post("/game/{id}/analyze")
-async def analyze_game(id: str):
-    game = Game(id, load_game_data(id), GAME_DATA_DIR)
-    analyzer = EventAnalyzer(game)
+@app.post("/game/{id}/analyze/{segment}")
+async def analyze_game(id: str, segment: int):
+    game = Game(id, load_game_metadata(id), GAME_DATA_DIR)
+    analyzer = EventAnalyzer(game, 1)
     analyzer.analyze()
     return analyzer.game.comments
 
-@app.get("/game/{id}/comments")
-async def get_comments(id: str):
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '.pkl')
+@app.get("/game/{id}/comments/{segment}")
+async def get_comments(id: str, segment: int):
+    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '-' + str(segment) + '.pkl')
     with open(save_path, 'rb') as f:
         game_data = pickle.load(f)
     return game_data['comments']
 
-@app.post("/game/{id}/comments/{index}")
-async def save_comment(id: str, index: int, comment_obj: dict):
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '.pkl')
+@app.post("/game/{id}/comments/{segment}/{index}")
+async def save_comment(id: str, index: int, comment_obj: dict, segment: int):
+    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '-' + str(segment) + '.pkl')
     with open(save_path, 'rb') as f:
         game_data = pickle.load(f)
 
@@ -226,8 +226,8 @@ async def save_comment(id: str, index: int, comment_obj: dict):
 
     return comment
 
-@app.post("/game/{id}/make")
-async def make_video(id: str):
+@app.post("/game/{id}/make/{segment}")
+async def make_video(id: str, segment: int):
     global current_task
     with task_lock:
         # Check if there's already a task running
@@ -251,7 +251,7 @@ async def make_video(id: str):
         }
     
     # Start the task in a separate thread
-    thread = threading.Thread(target=make_video_task, args=(id, cancellation_flag))
+    thread = threading.Thread(target=make_video_task, args=(id, segment, cancellation_flag))
     thread.daemon = True
     thread.start()
     
