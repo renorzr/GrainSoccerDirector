@@ -1,0 +1,267 @@
+.match-details-container {
+    max-width: 100%;
+}
+
+.match-info-section,
+.teams-section,
+.video-section,
+.comment-requirement-section {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid #e9ecef;
+}
+
+.match-info-section h3,
+.teams-section h3,
+.video-section h3,
+.comment-requirement-section h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 1.2rem;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 8px;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.info-item.full-width {
+    grid-column: 1 / -1;
+}
+
+.info-item label {
+    font-weight: 600;
+    color: #555;
+    font-size: 0.9rem;
+}
+
+.info-item span {
+    color: #333;
+    font-size: 1rem;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 5px;
+    border: 1px solid #e9ecef;
+}
+
+/* 队伍样式 */
+.teams-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 20px;
+    align-items: center;
+}
+
+.team-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    border: 2px solid #e9ecef;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+.team-card:hover {
+    border-color: #667eea;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.team-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.team-color {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #333;
+}
+
+.team-card h4 {
+    margin: 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.team-score {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.score-label {
+    font-weight: 500;
+    color: #666;
+}
+
+.score-value {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #667eea;
+}
+
+.vs-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #667eea;
+    background: white;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    border: 3px solid #667eea;
+}
+
+/* 可编辑输入框样式 */
+.editable-input,
+.editable-select,
+.editable-textarea {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-size: 1rem;
+    color: #333;
+    transition: all 0.3s ease;
+    font-family: inherit;
+}
+
+.editable-input:read-only,
+.editable-select:disabled,
+.editable-textarea:read-only {
+    background: #f8f9fa;
+    color: #6c757d;
+    cursor: default;
+}
+
+.editable-input:not(:read-only),
+.editable-select:not(:disabled),
+.editable-textarea:not(:read-only) {
+    background: white;
+    color: #333;
+    border-color: #667eea;
+    cursor: text;
+}
+
+.editable-input:not(:read-only):focus,
+.editable-select:not(:disabled):focus,
+.editable-textarea:not(:read-only):focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+.team-name-input {
+    text-align: center;
+    font-weight: 500;
+    font-size: 1.1rem;
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
+.team-name-input:read-only {
+    background: transparent;
+    color: #333;
+}
+
+.score-input {
+    width: 60px;
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #667eea;
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
+.score-input:read-only {
+    background: transparent;
+    color: #667eea;
+}
+
+.team-color-select {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e9ecef;
+}
+
+.team-color-select label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 5px;
+    display: block;
+}
+
+.video-selection-container {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.video-selection-container select {
+    flex: 1;
+}
+
+.match-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e9ecef;
+}
+
+.match-actions .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .info-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .teams-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .vs-divider {
+        order: -1;
+        width: 50px;
+        height: 50px;
+        font-size: 1.2rem;
+    }
+
+    .match-actions {
+        flex-direction: column;
+    }
+
+    .video-selection-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

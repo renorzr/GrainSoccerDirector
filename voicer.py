@@ -8,11 +8,12 @@ VOICE_DIR = 'voices'
 session = Session(os.getenv('FISH_AUDIO_API_KEY'))
 
 class Voicer:
-    def __init__(self, match):
-        self.match = match
+    def __init__(self, directory, comments):
+        self.directory = directory
+        self.comments = comments
 
     def make_voice(self):
-        for comment in self.match.comments:
+        for comment in self.comments:
             self.make_text_voice(comment.text)
 
     def make_text_voice(self, text):
@@ -25,9 +26,6 @@ class Voicer:
         if os.path.exists(voice_path) and os.path.getsize(voice_path) > 0:
             print(f"voice already exists for {text} at {voice_path}")
             return voice_path
-
-        if not os.path.exists(os.path.join(self.match.directory, VOICE_DIR)):
-            os.mkdir(os.path.join(self.match.directory, VOICE_DIR))
 
         # generate and save voice
         print(f"generating voice for comment {text} with path {voice_path}")
@@ -42,7 +40,7 @@ class Voicer:
         return voice_path
 
     def get_voice(self, text):
-        voice_path = os.path.join(self.match.directory, VOICE_DIR, self.voice_name(text))
+        voice_path = os.path.join(self.directory, VOICE_DIR, self.voice_name(text))
         if not os.path.exists(voice_path):
             print(f"Voice file not found for {text} at {voice_path}")
             return {"path": voice_path, "duration": 0, "start": 0}

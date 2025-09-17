@@ -5,9 +5,11 @@ from moviepy.video.fx import MultiplySpeed, Resize, CrossFadeIn, CrossFadeOut
 import numpy as np
 import os
 from voicer import Voicer
-from utils import format_time
-from event import Tag
+from utils import format_time, events_path, load_game_data
+from event import Event
+from event import Tag, EventType
 import cv2
+from scoreboard import Scoreboard
 
 PREVIEW_BUFFER = 2
 DELAY_BEFORE_REPLAY = 6
@@ -24,7 +26,6 @@ class Editor:
     # 初始化剪辑器
     def __init__(self, game, segment, cancellation_flag=None):
         self.game = game
-        self.voicer = Voicer(game)
         self.logo_clips = []
         self.replay_clips = []
         self.scoreboard_clips = []
@@ -36,24 +37,36 @@ class Editor:
             {'title': self.game.name, 'team0': self.game.teams[0].name, 'team1': self.game.teams[1].name, 'segment': segment}, 
             self.game.scoreboard_props)
         self.load_logo_video()
-
+        self.segment = segment
         game_data = load_game_data(self.game.game_id, self.segment)
         self.comments = game_data['comments']
+        self.voicer = Voicer(game.directory, self.comments)
         self.score_updates = game_data['score_updates']
         self.deadballs = game_data['deadballs']
         self.load_events()
+        self.start_time = 0
+        self.end_time = None
 
     def load_events(self):
-        self.events = Event.load_from_csv(os.path.join(self.game.directory, f'events.{self.game.game_id}-{self.segment}.csv'))
+        self.events = Event.load_from_csv(events_path(self.game.game_id, self.segment))
 
         for event in self.events:
             if event.type == EventType.Start:
-                self.start = event.time
-                break
-        # find the last event with type 'end'
-        for event in self.events:
-            if event.type == EventType.End:
-                self.end = event.time
+                self.start_time = event.time
+                self.score_updates = [(event.time, *self.load_last_segement_score())]
+            elif event.type == EventType.End:
+                self.end_time = event.time
+
+    def load_last_segement_score(self):
+        last_segment = self.segment - 1
+        if last_segment > 0:
+            game_data = load_game_data(self.game.game_id, last_segment)
+            last_score_updates = game_data['score_updates']
+            if len(last_score_updates) > 0:
+                score_updates = last_score_updates[-1]
+                return [score_updates[1], score_updates[2]]
+
+        return [0, 0]
     
     def load_logo_video(self):
         logo_video_cap = cv2.VideoCapture(self.game.logo_video)
@@ -93,21 +106,23 @@ class Editor:
         self.add_audio()
 
     def create_output_video(self):
-        if os.path.exists(os.path.join(self.game.directory, TEMP_VIDEO_NAME)):
-            print(f"output video {TEMP_VIDEO_NAME} already exists, skipping")
+        temp_video_path = os.path.join(self.game.directory, TEMP_VIDEO_NAME)
+        if os.path.exists(temp_video_path):
+            print(f"output video {temp_video_path} already exists, skipping")
             return
 
-        print(f"creating output video {self.game.main_video}")
+        print(f"creating output video {self.game.videos[self.segment - 1]}")
 
         replay_events = self.calculate_replay_times()
         print(f"found {len(replay_events)} replay events")
         self.calculate_logo_times(replay_events)
 
-        cap = cv2.VideoCapture(os.path.join(self.game.directory, self.game.main_video))
+        cap = cv2.VideoCapture(os.path.join(self.game.directory, self.game.videos[self.segment - 1]))
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        out = cv2.VideoWriter(os.path.join(self.game.directory, TEMP_VIDEO_NAME), cv2.VideoWriter_fourcc(*'vp80'), fps, (width, height))
+        self.end_time = self.end_time or cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps
+        out = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'vp80'), fps, (width, height))
         replay_frames = []
         replay_time = None
         processing_replay_event = None
@@ -163,13 +178,14 @@ class Editor:
         cap.release()
 
     def create_output_audio(self):
-        if os.path.exists(os.path.join(self.game.directory, TEMP_AUDIO_NAME)):
+        temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
+        if os.path.exists(temp_audio_path):
             print(f"output audio {TEMP_AUDIO_NAME} already exists, skipping")
             return
 
         print(f"creating output audio {TEMP_AUDIO_NAME}")
         self.voicer.make_voice()
-        audio_clips = [VideoFileClip(os.path.join(self.game.directory, self.game.main_video)).audio]
+        audio_clips = [VideoFileClip(os.path.join(self.game.directory, self.game.videos[self.segment - 1])).audio]
         last_comment = None
         for comment in self.comments:
             if not comment.text:
@@ -194,23 +210,27 @@ class Editor:
             logging.info(f"Adding voice for comment {comment.text} at {comment.time}")
             audio_clips.append(voice_clip.with_start(comment.time))
             last_comment = comment
-        CompositeAudioClip(audio_clips).write_audiofile(os.path.join(self.game.directory, TEMP_AUDIO_NAME), codec="aac")
+        CompositeAudioClip(audio_clips).write_audiofile(temp_audio_path, codec="aac")
 
     def add_audio(self):
-        command = f"ffmpeg -i {os.path.join(self.game.directory, TEMP_VIDEO_NAME)} -i {os.path.join(self.game.directory, TEMP_AUDIO_NAME)} -c:v copy -c:a aac -strict experimental {os.path.join(self.game.directory, 'output.mp4')} -y"
+        temp_video_path = os.path.join(self.game.directory, TEMP_VIDEO_NAME)
+        temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
+        output_video_path = os.path.join(self.game.directory, 'output.mp4')
+        command = f"ffmpeg -i {temp_video_path} -i {temp_audio_path} -c:v copy -c:a aac -strict experimental {output_video_path} -y"
         subprocess.run(command, shell=True)
-        os.remove(os.path.join(self.game.directory, TEMP_VIDEO_NAME))
-        os.remove(os.path.join(self.game.directory, TEMP_AUDIO_NAME))
+        os.remove(temp_video_path)
+        os.remove(temp_audio_path)
 
     def draw_scoreboard(self, time, frame):
-        if time < self.game.start or time > self.game.end:
+        if time < self.start_time or time > self.end_time:
             return
 
-        if len(self.score_updates) > 0 and time > self.score_updates[0].time:
+        if len(self.score_updates) > 0 and time > self.score_updates[0][0]:
             self.current_score = self.score_updates.pop(0)
 
         if self.current_score is not None:
-            self.scoreboard.render_frame(frame, time - self.game.start, self.current_score.score0, self.current_score.score1)
+            (time, score0, score1) = self.current_score
+            self.scoreboard.render_frame(frame, time - self.start_time, score0, score1)
 
     def calculate_logo_times(self, replay_events):
         self.logo_times = []
@@ -245,9 +265,9 @@ class Editor:
 
     # 计算重放片段的时间
     def calculate_replay_times(self):
-        print(f"calculating replay times for {len(self.game.events)} events in {self.game.main_video}")
+        print(f"calculating replay times for {len(self.events)} events in {self.game.videos[self.segment - 1]}")
         # 获取所有需要重放的事件
-        replay_events = [e for e in self.game.events if Tag.Replay in e.tags]
+        replay_events = [e for e in self.events if Tag.Replay in e.tags]
         print(f"found {len(replay_events)} replay events")
         if not replay_events:
             return []
@@ -294,7 +314,7 @@ class Editor:
         logo_clips = []
         last_highlight_end = 0
 
-        for event in self.game.events:
+        for event in self.events:
             if Tag.Replay in event.tags:
                 logo_clips.append(self.create_logo_clip(last_highlight_end))
                 highlight_clip = game_clip.subclipped(event.time - REPLAY_BUFFER, event.time + REPLAY_BUFFER + HIGHLIGHT_EXTEND).with_start(last_highlight_end)

@@ -19,8 +19,8 @@ import asyncio
 import threading
 from datetime import datetime, timedelta
 from enum import Enum
-from storage import list_objects, get_object_url, get_upload_url, delete_object
 import uuid
+from voicer import Voicer
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
 STORAGE_FOLDER = os.getenv("STORAGE_FOLDER", "games/")
@@ -73,11 +73,6 @@ class CancellationFlag:
 
 def load_game_metadata(game_id: str):
     game_data = yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8"))
-    if not game_data.get('main_video'):
-        game_data['main_video'] = get_object_url(STORAGE_FOLDER + 'source.' + game_id + '.mp4')
-    elif game_data.get('main_video').startswith('storage://'):
-        key = game_data.get('main_video').split('storage://')[1]
-        game_data['main_video'] = get_object_url(STORAGE_FOLDER + key)
     
     if not game_data.get('logo_video'):
         game_data['logo_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'logo.mp4')
@@ -152,10 +147,11 @@ def api_root():
 
 @app.get("/games")
 async def get_games():
-    return {"games": [game.split('.')[1] for game in os.listdir(GAME_DATA_DIR) if game.startswith('game.') and game.endswith('.yaml')]}
+    return {"games": [{'name': get_game_name(game.split('.')[1]), 'id': game.split('.')[1]} for game in os.listdir(GAME_DATA_DIR) if game.startswith('game.') and game.endswith('.yaml')]}
 
 @app.post("/game")
 async def create_game(game_obj: dict):
+    print(f"create_game: {game_obj}")
     save_path = os.path.join(GAME_DATA_DIR, 'game.' + game_obj['id'] + '.yaml')
     if os.path.exists(save_path):
         raise HTTPException(status_code=400, detail="Game already exists")
@@ -182,9 +178,9 @@ async def get_game(id: str):
         return yaml.safe_load(f)
 
 @app.post("/game/{id}/events/{segment}")
-async def save_events(id: str, events: list, segment: int):
-    events = [Event.from_dict(event) for event in events]
-    save_path = os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv')
+async def save_events(id: str, segment: int, request: dict):
+    events = [Event.from_dict(event) for event in request.get('events', [])]
+    save_path = os.path.join(GAME_DATA_DIR, f'events.{id}-{segment}.csv')
 
     Event.save_to_csv(save_path, events)
 
@@ -192,7 +188,7 @@ async def save_events(id: str, events: list, segment: int):
 
 @app.get("/game/{id}/events/{segment}")
 async def get_events(id: str, segment: int):
-    save_path = os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv')
+    save_path = os.path.join(GAME_DATA_DIR, f'events.{id}-{segment}.csv')
     csv_events = Event.load_from_csv(save_path)
     return {"events": [event.to_dict() for event in csv_events]}
 
@@ -201,18 +197,33 @@ async def analyze_game(id: str, segment: int):
     game = Game(id, load_game_metadata(id), GAME_DATA_DIR)
     analyzer = EventAnalyzer(game, 1)
     analyzer.analyze()
-    return analyzer.game.comments
+    return {"id": id, "segment": segment, "analyzed": True}
 
 @app.get("/game/{id}/comments/{segment}")
 async def get_comments(id: str, segment: int):
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '-' + str(segment) + '.pkl')
+    save_path = game_data_path(id, segment)
+    if not os.path.exists(save_path):
+        return []
     with open(save_path, 'rb') as f:
         game_data = pickle.load(f)
-    return game_data['comments']
+
+    comments = game_data['comments']
+
+    return {"comments": comments}
+
+@app.get("/game/{id}/comment/{segment}/{index}/voice")
+async def get_comment_voice(id: str, segment: int, index: int):
+    save_path = game_data_path(id, segment)
+    with open(save_path, 'rb') as f:
+        game_data = pickle.load(f)
+    comment = game_data['comments'][index]
+    voicer = Voicer(GAME_DATA_DIR, game_data['comments'])
+
+    return FileResponse(voicer.make_text_voice(comment.text))
 
 @app.post("/game/{id}/comments/{segment}/{index}")
 async def save_comment(id: str, index: int, comment_obj: dict, segment: int):
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '-' + str(segment) + '.pkl')
+    save_path = game_data_path(id, segment)
     with open(save_path, 'rb') as f:
         game_data = pickle.load(f)
 
@@ -323,11 +334,13 @@ async def cancel_task(id: str):
 
 @app.post("/game/{id}/clean")
 async def clean_game(id: str):
-    os.remove(os.path.join(GAME_DATA_DIR, 'events.' + id + '.csv'))
-    os.remove(os.path.join(GAME_DATA_DIR, 'game.' + id + '.pkl'))
-    os.remove(os.path.join(GAME_DATA_DIR, 'highlights.' + id + '.mp4'))
-    os.remove(os.path.join(GAME_DATA_DIR, 'logo.' + id + '.mp4'))
-    os.remove(os.path.join(GAME_DATA_DIR, 'game.' + id + '.mp4'))
+    if os.path.exists(os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml')):
+        os.remove(os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml'))
+
+    for segment in range(1, 5):
+        if os.path.exists(game_data_path(id, segment)):
+            os.remove(game_data_path(id, segment))
+
     return {"id": id, "cleaned": True}
 
 @app.post("/upload/presigned-url/{key}")
@@ -358,6 +371,13 @@ async def delete_video(filename: str):
         raise HTTPException(status_code=400, detail="Invalid file type")
     os.remove(os.path.join(GAME_DATA_DIR, filename))
     return {"filename": filename, "deleted": True}
+
+def get_game_name(id: str):
+    with open(os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml'), "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)['name']
+
+def game_data_path(id: str, segment: int):
+    return os.path.join(GAME_DATA_DIR, 'game.' + id + '-' + str(segment) + '.pkl')
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

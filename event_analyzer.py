@@ -5,7 +5,8 @@ from comment import Comment
 from ai import ChatAI
 from event import EventType, Tag
 from deadball import Deadball
-from utils import save_game_data
+from utils import save_game_data, game_data_path, events_path
+from event import Event
 
 IDLE_COMMENT_TIME = 30
 BATCH_SIZE = 10
@@ -24,11 +25,11 @@ class EventAnalyzer:
     def goal_scored(self, time, team=None):
         if team is not None:
             self.scores[team] += 1
-        self.score_updates.append(ScoreUpdate(time, self.scores[0], self.scores[1]))
+        self.score_updates.append((time, self.scores[0], self.scores[1]))
 
     # 分析事件(生成解说词, 更新比分, 更新死球状态)
     def analyze(self):
-        if os.path.exists(self.pkl_file):
+        if os.path.exists(game_data_path(self.game.game_id, self.segment)):
             print(f"game data already exists for {self.game.game_id}-{self.segment}")
             return
         
@@ -59,7 +60,8 @@ class EventAnalyzer:
         chat_ai.chat(prompt)
 
         last_comment_time = self.game.start
-        for event in self.game.events:
+        events = Event.load_from_csv(events_path(self.game.game_id, self.segment))
+        for event in events:
             self.update_deadball(event)
             
             for time in range(int(last_comment_time + IDLE_COMMENT_TIME), int(event.time) - 10, int(IDLE_COMMENT_TIME)):

@@ -1,7 +1,9 @@
 import openai
 import os
 import csv
+import pickle
 
+GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
 
 # Description: Utility functions for the project
 
@@ -36,12 +38,18 @@ def format_time(seconds, decimal_places=1, use_separator=True):
     return f'{minutes:02d}{sep}{seconds:0{width}.{decimal_places}f}'.replace('.', dot)
 
 def load_game_data(game_id: str, segment: int):
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + game_id + '-' + str(segment) + '.pkl')
+    save_path = game_data_path(game_id, segment)
     with open(save_path, 'rb') as f:
         game_data = pickle.load(f)
     return game_data
 
 def save_game_data(game_id: str, segment: int, game_data: dict):
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + game_id + '-' + str(segment) + '.pkl')
+    save_path = game_data_path(game_id, segment)
     with open(save_path, 'wb') as f:
         pickle.dump(game_data, f)
+
+def game_data_path(game_id: str, segment: int):
+    return os.path.join(GAME_DATA_DIR, 'game.' + game_id + '-' + str(segment) + '.pkl')
+    
+def events_path(game_id: str, segment: int):
+    return os.path.join(GAME_DATA_DIR, 'events.' + game_id + '-' + str(segment) + '.csv')
