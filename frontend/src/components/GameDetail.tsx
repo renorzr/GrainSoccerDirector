@@ -156,7 +156,7 @@ export const GameDetail: React.FC = () => {
                     <ArrowLeft size={16} style={{ marginRight: '0.5rem' }} />
                     返回比赛管理
                 </button>
-                <h2>比赛详情 - {gameId}</h2>
+                <h2>比赛: {game.name} ({gameId})</h2>
             </div>
 
             {error && (

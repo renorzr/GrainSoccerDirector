@@ -2,7 +2,6 @@ import dotenv
 dotenv.load_dotenv()
 
 import traceback
-import re
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,22 +17,15 @@ from editor import Editor
 import asyncio
 import threading
 from datetime import datetime, timedelta
-from enum import Enum
 import uuid
 from voicer import Voicer
+from task import Task, TaskStatus
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
 STORAGE_FOLDER = os.getenv("STORAGE_FOLDER", "games/")
 VIDEO_REGEX = os.getenv("VIDEO_REGEX", r"\/(\.+\).mp4$")
 VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv").split(",")
 
-# Task status enum
-class TaskStatus(Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
 
 app = FastAPI(
     title="Soccer Director HTTP API",
@@ -54,22 +46,9 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 # Global task management
-tasks = {}
-current_task = None
+current_task: Task = None
 task_lock = threading.Lock()
 
-class CancellationFlag:
-    def __init__(self):
-        self._cancelled = False
-        self._lock = threading.Lock()
-    
-    def cancel(self):
-        with self._lock:
-            self._cancelled = True
-    
-    def is_cancelled(self):
-        with self._lock:
-            return self._cancelled
 
 def load_game_metadata(game_id: str):
     game_data = yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8"))
@@ -82,60 +61,41 @@ def load_game_metadata(game_id: str):
 
     return game_data
 
-def make_video_task(game_id: str, segment: int, cancellation_flag: CancellationFlag):
+def make_video_task(game_id: str, segment: int):
     """Background task to make video"""
     global current_task
     try:
-        with task_lock:
-            if current_task != game_id:
-                return
-            tasks[game_id]["status"] = TaskStatus.RUNNING.value
-            tasks[game_id]["started_at"] = datetime.now().isoformat()
+        current_task.start()
         
         # Load game data
         game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
         
+        current_task.update_progress("analyzing", 0, 1)
         # Analyze events
         analyzer = EventAnalyzer(game, segment)
         analyzer.analyze()
         
-        # Check if task was cancelled
-        if cancellation_flag.is_cancelled():
-            with task_lock:
-                tasks[game_id]["status"] = TaskStatus.CANCELLED.value
-                tasks[game_id]["completed_at"] = datetime.now().isoformat()
-                if current_task == game_id:
-                    current_task = None
-            return
+        current_task.update_progress("analyzing", 1, 1)
         
-        # Edit video with cancellation support
-        editor = Editor(game, segment, cancellation_flag)
+        # Edit video
+        editor = Editor(game, segment, current_task)
         editor.edit()
         
         # Mark as completed
-        with task_lock:
-            if current_task == game_id:
-                tasks[game_id]["status"] = TaskStatus.COMPLETED.value
-                tasks[game_id]["completed_at"] = datetime.now().isoformat()
-                current_task = None
+        current_task.complete()
                 
     except InterruptedError as e:
         # Handle cancellation
         with task_lock:
-            tasks[game_id]["status"] = TaskStatus.CANCELLED.value
-            tasks[game_id]["error"] = str(e)
-            tasks[game_id]["completed_at"] = datetime.now().isoformat()
-            if current_task == game_id:
-                current_task = None
+            current_task.status = TaskStatus.CANCELLED.value
+            current_task.error = str(e)
+            current_task.completed_at = datetime.now().isoformat()
     except Exception as e:
         # print stack trace
         print(traceback.format_exc())
-        with task_lock:
-            tasks[game_id]["status"] = TaskStatus.FAILED.value
-            tasks[game_id]["error"] = str(e)
-            tasks[game_id]["completed_at"] = datetime.now().isoformat()
-            if current_task == game_id:
-                current_task = None
+        current_task.status = TaskStatus.FAILED.value
+        current_task.error = str(e)
+        current_task.completed_at = datetime.now().isoformat()
 
 @app.get("/")
 def root():
@@ -242,27 +202,13 @@ async def make_video(id: str, segment: int):
     global current_task
     with task_lock:
         # Check if there's already a task running
-        if current_task is not None:
+        if current_task and (current_task.status == TaskStatus.RUNNING or current_task.status == TaskStatus.PENDING):
             raise HTTPException(status_code=409, detail=f"Another task is already running for game: {current_task}")
         
-        # Check if this game already has a task
-        if id in tasks and tasks[id]["status"] in [TaskStatus.PENDING.value, TaskStatus.RUNNING.value]:
-            raise HTTPException(status_code=409, detail=f"Task for game {id} is already {tasks[id]['status']}")
-        
-        # Create new task with cancellation flag
-        current_task = id
-        cancellation_flag = CancellationFlag()
-        tasks[id] = {
-            "status": TaskStatus.PENDING.value,
-            "created_at": datetime.now().isoformat(),
-            "started_at": None,
-            "completed_at": None,
-            "error": None,
-            "cancellation_flag": cancellation_flag
-        }
+        current_task = Task(id, [("analyzing", 10), ("output_video", 70), ("output_audio", 10), ("add_audio", 10)])
     
     # Start the task in a separate thread
-    thread = threading.Thread(target=make_video_task, args=(id, segment, cancellation_flag))
+    thread = threading.Thread(target=make_video_task, args=(id, segment))
     thread.daemon = True
     thread.start()
     
@@ -270,67 +216,20 @@ async def make_video(id: str, segment: int):
 
 @app.get("/game/{id}/task/status")
 async def get_task_status(id: str):
-    """Get the status of a video making task"""
-    with task_lock:
-        if id not in tasks:
-            raise HTTPException(status_code=404, detail=f"No task found for game {id}")
-        
-        task_info = tasks[id].copy()
-        # Remove cancellation_flag as it's not JSON serializable
-        task_info.pop("cancellation_flag", None)
-        return {
-            "id": id,
-            "task_id": id,
-            **task_info
-        }
-
-@app.get("/tasks")
-async def get_all_tasks():
-    """Get status of all tasks"""
-    with task_lock:
-        # Remove cancellation_flag from all tasks as it's not JSON serializable
-        serializable_tasks = {}
-        for task_id, task_info in tasks.items():
-            task_copy = task_info.copy()
-            task_copy.pop("cancellation_flag", None)
-            serializable_tasks[task_id] = task_copy
-        
-        return {
-            "current_task": current_task,
-            "tasks": serializable_tasks
-        }
+    return current_task and id == current_task.id and current_task.to_dict() or {}
 
 @app.post("/game/{id}/task/cancel")
 async def cancel_task(id: str):
-    """Cancel a running or pending task"""
     global current_task
-    with task_lock:
-        if id not in tasks:
-            raise HTTPException(status_code=404, detail=f"No task found for game {id}")
-        
-        task_status = tasks[id]["status"]
-        
-        # Check if task can be cancelled
-        if task_status in [TaskStatus.COMPLETED.value, TaskStatus.FAILED.value, TaskStatus.CANCELLED.value]:
-            raise HTTPException(status_code=400, detail=f"Task for game {id} is already {task_status} and cannot be cancelled")
-        
-        # Cancel the task using cancellation flag
-        if "cancellation_flag" in tasks[id]:
-            tasks[id]["cancellation_flag"].cancel()
-        
-        # Update task status
-        if current_task == id:
-            current_task = None
-        
-        tasks[id]["status"] = TaskStatus.CANCELLED.value
-        tasks[id]["completed_at"] = datetime.now().isoformat()
-        
-        return {
-            "id": id,
-            "task_id": id,
-            "status": TaskStatus.CANCELLED.value,
-            "message": f"Task for game {id} has been cancelled"
-        }
+    if current_task and id == current_task.id and (current_task.status == TaskStatus.RUNNING or current_task.status == TaskStatus.PENDING):
+        current_task.cancel()
+    
+    return {
+        "id": id,
+        "task_id": id,
+        "status": TaskStatus.CANCELLED.value,
+        "message": f"Task for game {id} has been cancelled"
+    }
 
 @app.post("/game/{id}/clean")
 async def clean_game(id: str):

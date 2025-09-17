@@ -244,10 +244,20 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
                                     )}
                                 </div>
 
+                                {/* 进度条 */}
                                 {task.status === 'running' && (
-                                    <div className="progress-indicator">
-                                        <div className="loading"></div>
-                                        <span>任务正在运行中...</span>
+                                    <div className="progress-section">
+                                        <div className="progress-header">
+                                            <div className="loading"></div>
+                                            <span>任务运行中...</span>
+                                            <span className="progress-percentage">{Math.floor(task.progress || 0)}%</span>
+                                        </div>
+                                        <div className="progress-bar">
+                                            <div
+                                                className="progress-fill"
+                                                style={{ width: `${task.progress}%` }}
+                                            ></div>
+                                        </div>
                                     </div>
                                 )}
                             </div>

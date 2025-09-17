@@ -45,7 +45,7 @@ export interface EventsResponse {
 
 // Comment Types
 export interface Comment {
-    time: string;
+    time: number;
     text: string;
 }
 
@@ -74,6 +74,7 @@ export interface Task {
     started_at?: string;
     completed_at?: string;
     error?: string;
+    progress?: number; // 任务进度百分比 (0-100)
 }
 
 // Event Type Options

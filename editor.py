@@ -24,7 +24,7 @@ TEMP_AUDIO_NAME = 'temp.aac'
 # 剪辑器
 class Editor:
     # 初始化剪辑器
-    def __init__(self, game, segment, cancellation_flag=None):
+    def __init__(self, game, segment, task=None):
         self.game = game
         self.logo_clips = []
         self.replay_clips = []
@@ -32,7 +32,7 @@ class Editor:
         self.comment_audio = None
         self.current_score = None
         self.logo_times = None
-        self.cancellation_flag = cancellation_flag  # 用于检查是否被取消
+        self.task = task
         self.scoreboard = Scoreboard.from_dict(
             {'title': self.game.name, 'team0': self.game.teams[0].name, 'team1': self.game.teams[1].name, 'segment': segment}, 
             self.game.scoreboard_props)
@@ -86,21 +86,16 @@ class Editor:
     def game_video(self, segment):
         return os.path.join(self.game.directory, self.game.videos[segment - 1])
 
+
     def edit(self):
-        # 检查是否被取消
-        if self.cancellation_flag and self.cancellation_flag.is_cancelled():
-            raise InterruptedError("Video editing was cancelled")
-            
         self.create_output_video()
         
-        # 检查是否被取消
-        if self.cancellation_flag and self.cancellation_flag.is_cancelled():
+        if self.task.is_cancelled():
             raise InterruptedError("Video editing was cancelled")
             
         self.create_output_audio()
         
-        # 检查是否被取消
-        if self.cancellation_flag and self.cancellation_flag.is_cancelled():
+        if self.task.is_cancelled():
             raise InterruptedError("Video editing was cancelled")
             
         self.add_audio()
@@ -130,7 +125,8 @@ class Editor:
 
         while True:
             # 检查是否被取消
-            if self.cancellation_flag and self.cancellation_flag.is_cancelled():
+            self.task.update_progress("output_video", frame_count, cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if self.task.is_cancelled():
                 print("Video processing was cancelled")
                 out.release()
                 cap.release()
@@ -187,7 +183,14 @@ class Editor:
         self.voicer.make_voice()
         audio_clips = [VideoFileClip(os.path.join(self.game.directory, self.game.videos[self.segment - 1])).audio]
         last_comment = None
+        comment_count = 0
         for comment in self.comments:
+            comment_count += 1
+            self.task.update_progress("output_audio", comment_count, len(self.comments))
+            if self.task.is_cancelled():
+                print("Video processing was cancelled")
+                raise InterruptedError("Video processing was cancelled")
+
             if not comment.text:
                 continue
             voice_path = self.voicer.get_voice(comment.text)["path"]
@@ -213,6 +216,7 @@ class Editor:
         CompositeAudioClip(audio_clips).write_audiofile(temp_audio_path, codec="aac")
 
     def add_audio(self):
+        self.task.update_progress("add_audio", 0, 1)
         temp_video_path = os.path.join(self.game.directory, TEMP_VIDEO_NAME)
         temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
         output_video_path = os.path.join(self.game.directory, 'output.mp4')
