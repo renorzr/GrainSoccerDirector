@@ -12,8 +12,12 @@ class Voicer:
         self.directory = directory
         self.comments = comments
 
-    def make_voice(self):
-        for comment in self.comments:
+    def make_voice(self, task=None):
+        for index, comment in enumerate(self.comments):
+            if task:
+                if task.is_cancelled():
+                    raise InterruptedError("Voice making was cancelled")
+                task.update_progress("make_voice", index, len(self.comments))
             self.make_text_voice(comment.text)
 
     def make_text_voice(self, text):

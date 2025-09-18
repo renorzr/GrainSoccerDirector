@@ -44,7 +44,7 @@ class Event:
     def __init__(self, id, type, time, team=None, player=None, desc=None, tags=None):
         self.type = type
         self.time = parse_time(time)
-        self.team = int(team) if team else None
+        self.team = int(team) if team is not None else None
         self.player = player
         self.desc = desc
         self.tags = tags

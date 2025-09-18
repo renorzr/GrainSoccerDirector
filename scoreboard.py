@@ -30,7 +30,7 @@ class Scoreboard:
         self.current_scoreboard_img = None
         self.current_scoreboard_key = None
 
-    def create_scoreboard_img(self, time, score0, score1):
+    def create_scoreboard_img(self, time_str, score0, score1):
         # 创建一个图，在scoreboard_img加上时间和比分
         # 复制scoreboard底图
         img = self.scoreboard_img.copy()
@@ -50,7 +50,6 @@ class Scoreboard:
                 font = ImageFont.truetype(font_path, time_prop.height)
             except Exception:
                 font = ImageFont.load_default()
-            time_str = format_time(time)
             draw_text(draw, time_str, time_prop)
 
         # 绘制比分0
@@ -122,7 +121,7 @@ class Scoreboard:
 
 
     def render_frame(self, frame, time, score0, score1):
-        time = int(time)
+        time_str = format_time(time, 0)
         # If scoreboard image has alpha, blend it onto the frame
         sh, sw = self.scoreboard_img.shape[:2]
         fh, fw = frame.shape[:2]
@@ -131,7 +130,7 @@ class Scoreboard:
         x_offset = (fw - sw) // 2
         y_offset = 0
 
-        self.update_scoreboard_img(time, score0, score1)
+        self.update_scoreboard_img(time_str, score0, score1)
         if self.current_scoreboard_img.shape[2] == 4:
             alpha_s = self.current_scoreboard_img[:, :, 3] / 255.0
             alpha_l = 1.0 - alpha_s
@@ -144,11 +143,11 @@ class Scoreboard:
             frame[y_offset:y_offset+sh, x_offset:x_offset+sw] = self.current_scoreboard_img
         return frame
 
-    def update_scoreboard_img(self, time, score0, score1):
-        key = f'{time}_{score0}_{score1}'
+    def update_scoreboard_img(self, time_str, score0, score1):
+        key = f'{time_str}_{score0}_{score1}'
         if key == self.current_scoreboard_key:
             return
-        self.current_scoreboard_img = self.create_scoreboard_img(time, score0, score1)
+        self.current_scoreboard_img = self.create_scoreboard_img(time_str, score0, score1)
         self.current_scoreboard_key = key
 
 # Draw texts (score0, score1, and others)
@@ -218,7 +217,7 @@ if __name__ == '__main__':
         },
     })
 
-    img = b.update_scoreboard_img(60, 10, 0)
+    img = b.update_scoreboard_img("01:00", 10, 0)
     cv2.imshow("img", img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()

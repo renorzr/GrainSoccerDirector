@@ -226,9 +226,9 @@ export const EventsPanel: React.FC<EventsPanelProps> = ({ gameId }) => {
                         value={currentSegment}
                         onChange={(e) => handleSegmentChange(parseInt(e.target.value))}
                     >
-                        {[1, 2, 3, 4].map(segment => (
-                            <option key={segment} value={segment}>
-                                第{segment}节
+                        {game?.videos.map((_, index) => (
+                            <option key={index} value={index + 1}>
+                                第{index + 1}节
                             </option>
                         ))}
                     </select>
@@ -316,8 +316,8 @@ export const EventsPanel: React.FC<EventsPanelProps> = ({ gameId }) => {
                                     className="form-control"
                                 >
                                     <option value="">请选择队伍</option>
-                                    <option value="0">队伍1</option>
-                                    <option value="1">队伍2</option>
+                                    <option value="0">{game?.teams[0].name}</option>
+                                    <option value="1">{game?.teams[1].name}</option>
                                 </select>
                             </td>
                             <td>
@@ -384,7 +384,7 @@ export const EventsPanel: React.FC<EventsPanelProps> = ({ gameId }) => {
                                         </button>
                                     </td>
                                     <td>{getEventTypeLabel(event.type)}</td>
-                                    <td>{event.team !== null ? `队伍${event.team + 1}` : '-'}</td>
+                                    <td>{event.team !== null ? game?.teams[event.team].name : '-'}</td>
                                     <td>{event.player || '-'}</td>
                                     <td>{event.desc || '-'}</td>
                                     <td>

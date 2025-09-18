@@ -5,7 +5,7 @@ from comment import Comment
 from ai import ChatAI
 from event import EventType, Tag
 from deadball import Deadball
-from utils import save_game_data, game_data_path, events_path
+from utils import save_game_data, game_data_path, events_path, load_game_data
 from event import Event
 
 IDLE_COMMENT_TIME = 30
@@ -14,31 +14,53 @@ BATCH_SIZE = 10
 # 事件分析器
 class EventAnalyzer:
     # 初始化事件分析器
-    def __init__(self, game, segment):
+    def __init__(self, game, segment, task=None):
         self.game = game
         self.segment = segment
         self.current_deadball = None
         self.score_updates = []
         self.deadballs = []
         self.scores = [0, 0]
+        self.task = task
+        self.end_time = None
+        self.load_events()
 
-    def goal_scored(self, time, team=None):
-        if team is not None:
-            self.scores[team] += 1
+    def update_progress(self, stage, progress, total):
+        if self.task:
+            self.task.update_progress(stage, progress, total)
+
+    def is_cancelled(self):
+        return self.task and self.task.is_cancelled()
+
+    def goal_scored(self, time, team):
+        self.scores[team] += 1
         self.score_updates.append((time, self.scores[0], self.scores[1]))
 
+    def load_events(self):
+        self.events = Event.load_from_csv(events_path(self.game.game_id, self.segment))
+
+        for event in self.events:
+            if event.type == EventType.Start:
+                self.start_time = event.time
+                self.scores = self.load_last_segement_score()
+                self.score_updates = [(event.time, *self.scores)]
+            elif event.type == EventType.End:
+                self.end_time = event.time
+
     # 分析事件(生成解说词, 更新比分, 更新死球状态)
-    def analyze(self):
-        if os.path.exists(game_data_path(self.game.game_id, self.segment)):
+    def analyze(self, force=False):
+        if os.path.exists(game_data_path(self.game.game_id, self.segment)) and not force:
             print(f"game data already exists for {self.game.game_id}-{self.segment}")
             return
-        
+
+        self.score_updates = [(self.start_time, *self.load_last_segement_score())]
+
         comments = []
         
         game_info = f"比赛名称：{self.game.name}\n"
         game_info += f"{self.game.teams[0].color}队服: {self.game.teams[0].name}队\n"
         game_info += f"{self.game.teams[1].color}队服: {self.game.teams[1].name}队\n"
-        game_info += f"目前是第{self.segment}节，比分是{self.game.teams[0].score}:{self.game.teams[1].score}\n" if self.segment and self.segment > 1 else ""
+        game_info += f"目前是第{self.segment}节，上节比分是{self.scores[0]}:{self.scores[1]}\n" if self.segment and self.segment > 1 else ""
         game_info += f"其它信息：{self.game.description}\n" if self.game.description else ""
         game_info += f"其它要求：{self.game.comment_requirement}\n" if self.game.comment_requirement else ""
 
@@ -49,9 +71,9 @@ class EventAnalyzer:
         prompt += "1.提及球员名字时请用使用引号，可以省略球队和号码，如果不知道球员名字可以说xx队的x号。\n"
         prompt += "2.生成的文字会发送给TTS生成语音，应使用明确可读的文字表达，如：“银杏队2:1樱花队”应表述为“银杏队二比一领先樱花队”。\n\n"
         prompt += "每次发送给你的事件将以事件代码开头，然后是事件主体球队、队员和描述(N/A 表示未知或不可用)。事件代码的含义以及解说要求如下：\n"
-        prompt += "Idle: 没有特别的事 要求：根据比赛信息和场上态势简短点评"
-        prompt += "EndQuater: 一节比赛结束 要求：宣布第x节比赛结束，简短点评，提醒观众下一节马上开始。"
-        prompt += "Intro: 开场前的介绍 要求：开场解说词，如果不是第一节，请补充上一节比分是x:x"
+        prompt += "Idle: 没有特别的事 要求：根据比赛信息和场上态势简短点评\n"
+        prompt += "EndQuater: 一节比赛结束 要求：宣布第x节比赛结束，简短点评，提醒观众下一节马上开始。\n"
+        prompt += "Intro: 开场前的介绍 要求：开场解说词\n"
         for event_type in EventType:
             prompt += f"{event_type.name}: {event_type.event_name} {'要求：' + event_type.req if event_type.req else ''}\n"
         prompt += "以下比赛信息供参考：\n" + game_info
@@ -59,9 +81,14 @@ class EventAnalyzer:
         
         chat_ai.chat(prompt)
 
-        last_comment_time = self.game.start
+        last_comment_time = self.start_time
         events = Event.load_from_csv(events_path(self.game.game_id, self.segment))
-        for event in events:
+        for index, event in enumerate(events):
+            print('event:', event, 'team:', event.team)
+            self.update_progress("analyzing", index, len(events))
+            if self.is_cancelled():
+                raise InterruptedError("Event analyzing was cancelled")
+
             self.update_deadball(event)
             
             for time in range(int(last_comment_time + IDLE_COMMENT_TIME), int(event.time) - 10, int(IDLE_COMMENT_TIME)):
@@ -78,7 +105,7 @@ class EventAnalyzer:
                 comments.append(Comment(event.time, shoot_text(), 'event', event.id, event.type.level))
                 event.time += 1
                 self.goal_scored(event.time, event.team)
-                event.desc = (event.desc or '') + f", 比分被改写为{self.game.teams[0].score}:{self.game.teams[1].score}"
+                event.desc = (event.desc or '') + f", 比分被改写为{self.scores[0]}:{self.scores[1]}"
             elif event.type == EventType.Miss:
                 comments.append(Comment(event.time, shoot_text(), 'event', event.id, event.type.level))
                 event.time += 1
@@ -90,7 +117,7 @@ class EventAnalyzer:
 
             last_comment_time = event.time
 
-        save_game_data(self.game.game_id, self.segment, {'comments': comments, 'score_updates': self.score_updates, 'deadballs': self.deadballs})
+        save_game_data(self.game.game_id, self.segment, {'comments': comments, 'score_updates': self.score_updates, 'deadballs': self.deadballs, 'start_time': self.start_time, 'end_time': self.end_time})
 
     # 生成事件解说词
     def event_comment(self, chat_ai, event):
@@ -109,6 +136,17 @@ class EventAnalyzer:
             self.current_deadball.close(event.time)
             self.deadballs.append(self.current_deadball)
             self.current_deadball = None
+
+    def load_last_segement_score(self):
+        last_segment = self.segment - 1
+        if last_segment > 0:
+            game_data = load_game_data(self.game.game_id, last_segment)
+            last_score_updates = game_data['score_updates']
+            if len(last_score_updates) > 0:
+                score_updates = last_score_updates[-1]
+                return [score_updates[1], score_updates[2]]
+
+        return [0, 0]
 
 
 # 射门解说词

@@ -43,31 +43,10 @@ class Editor:
         self.voicer = Voicer(game.directory, self.comments)
         self.score_updates = game_data['score_updates']
         self.deadballs = game_data['deadballs']
-        self.load_events()
-        self.start_time = 0
-        self.end_time = None
-
-    def load_events(self):
         self.events = Event.load_from_csv(events_path(self.game.game_id, self.segment))
+        self.start_time = game_data['start_time']
+        self.end_time = game_data['end_time']
 
-        for event in self.events:
-            if event.type == EventType.Start:
-                self.start_time = event.time
-                self.score_updates = [(event.time, *self.load_last_segement_score())]
-            elif event.type == EventType.End:
-                self.end_time = event.time
-
-    def load_last_segement_score(self):
-        last_segment = self.segment - 1
-        if last_segment > 0:
-            game_data = load_game_data(self.game.game_id, last_segment)
-            last_score_updates = game_data['score_updates']
-            if len(last_score_updates) > 0:
-                score_updates = last_score_updates[-1]
-                return [score_updates[1], score_updates[2]]
-
-        return [0, 0]
-    
     def load_logo_video(self):
         logo_video_cap = cv2.VideoCapture(self.game.logo_video)
         fps = logo_video_cap.get(cv2.CAP_PROP_FPS)
@@ -90,22 +69,18 @@ class Editor:
     def edit(self):
         self.create_output_video()
         
-        if self.task.is_cancelled():
+        if self.is_cancelled():
             raise InterruptedError("Video editing was cancelled")
             
         self.create_output_audio()
         
-        if self.task.is_cancelled():
+        if self.is_cancelled():
             raise InterruptedError("Video editing was cancelled")
             
         self.add_audio()
 
     def create_output_video(self):
         temp_video_path = os.path.join(self.game.directory, TEMP_VIDEO_NAME)
-        if os.path.exists(temp_video_path):
-            print(f"output video {temp_video_path} already exists, skipping")
-            return
-
         print(f"creating output video {self.game.videos[self.segment - 1]}")
 
         replay_events = self.calculate_replay_times()
@@ -125,8 +100,8 @@ class Editor:
 
         while True:
             # 检查是否被取消
-            self.task.update_progress("output_video", frame_count, cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if self.task.is_cancelled():
+            self.update_progress("output_video", frame_count, cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            if self.is_cancelled():
                 print("Video processing was cancelled")
                 out.release()
                 cap.release()
@@ -175,19 +150,15 @@ class Editor:
 
     def create_output_audio(self):
         temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
-        if os.path.exists(temp_audio_path):
-            print(f"output audio {TEMP_AUDIO_NAME} already exists, skipping")
-            return
-
         print(f"creating output audio {TEMP_AUDIO_NAME}")
-        self.voicer.make_voice()
+        self.voicer.make_voice(self.task)
         audio_clips = [VideoFileClip(os.path.join(self.game.directory, self.game.videos[self.segment - 1])).audio]
         last_comment = None
         comment_count = 0
         for comment in self.comments:
             comment_count += 1
-            self.task.update_progress("output_audio", comment_count, len(self.comments))
-            if self.task.is_cancelled():
+            self.update_progress("output_audio", comment_count, len(self.comments))
+            if self.is_cancelled():
                 print("Video processing was cancelled")
                 raise InterruptedError("Video processing was cancelled")
 
@@ -216,10 +187,10 @@ class Editor:
         CompositeAudioClip(audio_clips).write_audiofile(temp_audio_path, codec="aac")
 
     def add_audio(self):
-        self.task.update_progress("add_audio", 0, 1)
+        self.update_progress("add_audio", 0, 1)
         temp_video_path = os.path.join(self.game.directory, TEMP_VIDEO_NAME)
         temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
-        output_video_path = os.path.join(self.game.directory, 'output.mp4')
+        output_video_path = os.path.join(self.game.directory, f'output-{self.segment}.mp4')
         command = f"ffmpeg -i {temp_video_path} -i {temp_audio_path} -c:v copy -c:a aac -strict experimental {output_video_path} -y"
         subprocess.run(command, shell=True)
         os.remove(temp_video_path)
@@ -233,7 +204,7 @@ class Editor:
             self.current_score = self.score_updates.pop(0)
 
         if self.current_score is not None:
-            (time, score0, score1) = self.current_score
+            (_, score0, score1) = self.current_score
             self.scoreboard.render_frame(frame, time - self.start_time, score0, score1)
 
     def calculate_logo_times(self, replay_events):
@@ -355,3 +326,10 @@ class Editor:
             highlights_clip.audio = CompositeAudioClip(audio_clips)
 
         return highlights_clip
+
+    def update_progress(self, stage, progress, total):
+        if self.task:
+            self.task.update_progress(stage, progress, total)
+
+    def is_cancelled(self):
+        return self.task and self.task.is_cancelled()

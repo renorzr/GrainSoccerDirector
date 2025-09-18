@@ -149,14 +149,18 @@ export const videoApi = {
     getVideoUrl: (videoName: string): string => {
         return `${API_BASE}/video/${encodeURIComponent(videoName)}`;
     },
+
+    getVideoPreviewUrl: (videoName: string, size: string = "200,150"): string => {
+        return `${API_BASE}/video/${encodeURIComponent(videoName)}/preview?size=${size}`;
+    },
 };
 
 // Task API
 export const taskApi = {
     // Get task status
-    getTaskStatus: async (gameId: string): Promise<Task> => {
+    getTaskStatus: async (gameId: string, taskName: 'make_video' | 'analyze_game'): Promise<Task> => {
         try {
-            const response: AxiosResponse<Task> = await api.get(`/game/${gameId}/task/status`);
+            const response: AxiosResponse<Task> = await api.get(`/game/${gameId}/task/${taskName}/status`);
             return response.data;
         } catch (error: any) {
             if (error.response?.status === 404) {
@@ -175,9 +179,14 @@ export const taskApi = {
         await api.post(`/game/${gameId}/make/${segment}`);
     },
 
-    // Cancel video making task
-    cancelVideoMaking: async (gameId: string): Promise<void> => {
-        await api.post(`/game/${gameId}/task/cancel`);
+    // Start analyze game task
+    startAnalyzeGame: async (gameId: string, segment: number): Promise<void> => {
+        await api.post(`/game/${gameId}/analyze/${segment}`);
+    },
+
+    // Cancel task
+    cancelTask: async (gameId: string, taskName: 'make_video' | 'analyze_game'): Promise<void> => {
+        await api.post(`/game/${gameId}/task/${taskName}/cancel`);
     },
 };
 

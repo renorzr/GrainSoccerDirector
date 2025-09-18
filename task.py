@@ -49,7 +49,7 @@ class Task:
 
     def update_progress(self, stage, current_step, total_steps):
         if total_steps < 100 or current_step % 100 == 0:
-            print(f"update_progress {stage} {current_step} {total_steps}")
+            print(f"start update_progress {stage} {current_step} {total_steps}")
         
         progress = 0
         for s in self.stages:
@@ -58,6 +58,9 @@ class Task:
                 break
             else:
                 progress += s[1]
+
+        if total_steps < 100 or current_step % 100 == 0:
+            print(f"done update_progress {stage} {current_step} {total_steps} {progress}")
         self.progress = progress
         self.stage = stage
 

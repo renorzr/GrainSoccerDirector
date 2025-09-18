@@ -24,12 +24,12 @@ class Comment:
             print(f"{file_path} not found")
             return []
 
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f) or []
 
         return [Comment.from_dict(obj) for obj in data]
 
     @classmethod
     def save_to_yaml(cls, file_path, comments):
-        with open(file_path, 'w') as f:
+        with open(file_path, 'w', encoding='utf-8') as f:
             yaml.dump([c.__dict__ for c in comments], f)

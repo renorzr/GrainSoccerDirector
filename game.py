@@ -14,7 +14,7 @@ class Game:
         self.end = None
         self.description = obj.get('description', '')
         self.comment_requirement = obj.get('comment_requirement')
-        self.teams = [Team(obj['name'], obj['color'], obj.get('code'), obj.get('score', 0)) for obj in obj['teams']]
+        self.teams = [Team(obj['name'], obj['color'], obj.get('code')) for obj in obj['teams']]
         self.videos = obj.get('videos', [])
         self.logo_video = obj.get('logo_video', os.path.join(directory, 'logo.mp4'))
         self.brand_video = obj.get('brand_video', os.path.join(directory, 'brand.mp4'))
@@ -23,5 +23,5 @@ class Game:
         self.narrator = obj.get('narrator', '云说')
         self.directory = directory
 
-        with open(obj.get('scoreboard', os.path.join(directory, 'scoreboard.yaml')), 'r') as f:
+        with open(obj.get('scoreboard', os.path.join(directory, 'scoreboard.yaml')), 'r', encoding='utf-8') as f:
             self.scoreboard_props = yaml.safe_load(f)

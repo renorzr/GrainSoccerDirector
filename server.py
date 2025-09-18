@@ -2,8 +2,8 @@ import dotenv
 dotenv.load_dotenv()
 
 import traceback
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from game import Game
@@ -20,10 +20,9 @@ from datetime import datetime, timedelta
 import uuid
 from voicer import Voicer
 from task import Task, TaskStatus
+from utils import video_preview
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
-STORAGE_FOLDER = os.getenv("STORAGE_FOLDER", "games/")
-VIDEO_REGEX = os.getenv("VIDEO_REGEX", r"\/(\.+\).mp4$")
 VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv").split(",")
 
 
@@ -46,7 +45,8 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 # Global task management
-current_task: Task = None
+make_video_task: Task = None
+analyze_game_task: Task = None
 task_lock = threading.Lock()
 
 
@@ -61,41 +61,59 @@ def load_game_metadata(game_id: str):
 
     return game_data
 
-def make_video_task(game_id: str, segment: int):
+def run_make_video_task(game_id: str, segment: int):
     """Background task to make video"""
-    global current_task
+    global make_video_task
     try:
-        current_task.start()
+        make_video_task.start()
         
         # Load game data
         game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
         
-        current_task.update_progress("analyzing", 0, 1)
+        make_video_task.update_progress("analyzing", 0, 1)
         # Analyze events
-        analyzer = EventAnalyzer(game, segment)
+        analyzer = EventAnalyzer(game, segment, make_video_task)
         analyzer.analyze()
         
-        current_task.update_progress("analyzing", 1, 1)
+        make_video_task.update_progress("analyzing", 1, 1)
         
         # Edit video
-        editor = Editor(game, segment, current_task)
+        editor = Editor(game, segment, make_video_task)
         editor.edit()
         
         # Mark as completed
-        current_task.complete()
+        make_video_task.complete()
                 
     except InterruptedError as e:
         # Handle cancellation
         with task_lock:
-            current_task.status = TaskStatus.CANCELLED.value
-            current_task.error = str(e)
-            current_task.completed_at = datetime.now().isoformat()
+            make_video_task.status = TaskStatus.CANCELLED.value
+            make_video_task.error = str(e)
+            make_video_task.completed_at = datetime.now().isoformat()
     except Exception as e:
         # print stack trace
         print(traceback.format_exc())
-        current_task.status = TaskStatus.FAILED.value
-        current_task.error = str(e)
-        current_task.completed_at = datetime.now().isoformat()
+        make_video_task.status = TaskStatus.FAILED.value
+        make_video_task.error = str(e)
+        make_video_task.completed_at = datetime.now().isoformat()
+
+def run_analyze_game_task(game_id: str, segment: int):
+    global analyze_game_task
+    try:
+        analyze_game_task.start()
+        game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
+        analyzer = EventAnalyzer(game, segment, analyze_game_task)
+        analyzer.analyze(force=True)
+        analyze_game_task.complete()
+    except InterruptedError as e:
+        analyze_game_task.status = TaskStatus.CANCELLED.value
+        analyze_game_task.error = str(e)
+        analyze_game_task.completed_at = datetime.now().isoformat()
+    except Exception as e:
+        print(traceback.format_exc())
+        analyze_game_task.status = TaskStatus.FAILED.value
+        analyze_game_task.error = str(e)
+        analyze_game_task.completed_at = datetime.now().isoformat()
 
 @app.get("/")
 def root():
@@ -154,10 +172,15 @@ async def get_events(id: str, segment: int):
 
 @app.post("/game/{id}/analyze/{segment}")
 async def analyze_game(id: str, segment: int):
-    game = Game(id, load_game_metadata(id), GAME_DATA_DIR)
-    analyzer = EventAnalyzer(game, 1)
-    analyzer.analyze()
-    return {"id": id, "segment": segment, "analyzed": True}
+    global analyze_game_task
+    if analyze_game_task and (analyze_game_task.status == TaskStatus.RUNNING or analyze_game_task.status == TaskStatus.PENDING):
+        raise HTTPException(status_code=409, detail=f"Another task is already running for game: {analyze_game_task}")
+
+    analyze_game_task = Task(id, [("analyzing", 100)])
+    thread = threading.Thread(target=run_analyze_game_task, args=(id, segment))
+    thread.daemon = True
+    thread.start()
+    return {"id": id, "task_id": id, "status": TaskStatus.PENDING.value, "message": "Analyzing game task started"}
 
 @app.get("/game/{id}/comments/{segment}")
 async def get_comments(id: str, segment: int):
@@ -199,30 +222,35 @@ async def save_comment(id: str, index: int, comment_obj: dict, segment: int):
 
 @app.post("/game/{id}/make/{segment}")
 async def make_video(id: str, segment: int):
-    global current_task
+    global make_video_task
     with task_lock:
         # Check if there's already a task running
-        if current_task and (current_task.status == TaskStatus.RUNNING or current_task.status == TaskStatus.PENDING):
-            raise HTTPException(status_code=409, detail=f"Another task is already running for game: {current_task}")
+        if make_video_task and (make_video_task.status == TaskStatus.RUNNING or make_video_task.status == TaskStatus.PENDING):
+            raise HTTPException(status_code=409, detail=f"Another task is already running for game: {make_video_task}")
         
-        current_task = Task(id, [("analyzing", 10), ("output_video", 70), ("output_audio", 10), ("add_audio", 10)])
+        make_video_task = Task(id, [("analyzing", 10), ("output_video", 70), ("make_voice", 5), ("output_audio", 5), ("add_audio", 10)])
     
     # Start the task in a separate thread
-    thread = threading.Thread(target=make_video_task, args=(id, segment))
+    thread = threading.Thread(target=run_make_video_task, args=(id, segment))
     thread.daemon = True
     thread.start()
     
     return {"id": id, "task_id": id, "status": TaskStatus.PENDING.value, "message": "Video making task started"}
 
-@app.get("/game/{id}/task/status")
-async def get_task_status(id: str):
-    return current_task and id == current_task.id and current_task.to_dict() or {}
+@app.get("/game/{id}/task/{task_name}/status")
+async def get_task_status(id: str, task_name: str):
+    if task_name == "make_video":
+        return make_video_task and id == make_video_task.id and make_video_task.to_dict() or {}
+    elif task_name == "analyze_game":
+        return analyze_game_task and id == analyze_game_task.id and analyze_game_task.to_dict() or {}
 
-@app.post("/game/{id}/task/cancel")
-async def cancel_task(id: str):
-    global current_task
-    if current_task and id == current_task.id and (current_task.status == TaskStatus.RUNNING or current_task.status == TaskStatus.PENDING):
-        current_task.cancel()
+@app.post("/game/{id}/task/{task_name}/cancel")
+async def cancel_task(id: str, task_name: str):
+    global make_video_task, analyze_game_task
+    if task_name == "make_video" and make_video_task and id == make_video_task.id and (make_video_task.status == TaskStatus.RUNNING or make_video_task.status == TaskStatus.PENDING):
+        make_video_task.cancel()
+    elif task_name == "analyze_game" and analyze_game_task and id == analyze_game_task.id and (analyze_game_task.status == TaskStatus.RUNNING or analyze_game_task.status == TaskStatus.PENDING):
+        analyze_game_task.cancel()
     
     return {
         "id": id,
@@ -257,6 +285,28 @@ async def upload_file(key: str, file: UploadFile = File(...)):
 @app.get("/videos")
 async def get_videos():
     return {"videos": [{'name': filename, 'size': os.path.getsize(os.path.join(GAME_DATA_DIR, filename)), 'last_modified': os.path.getmtime(os.path.join(GAME_DATA_DIR, filename)) * 1000, 'access_url': f'/video/{filename}'} for filename in os.listdir(GAME_DATA_DIR) if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
+
+@app.get("/video/{filename}/preview")
+async def get_video_preview(filename: str, request: Request):
+    filepath = os.path.join(GAME_DATA_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    size = request.query_params.get('size', "200,150")
+    size = tuple(int(size) for size in size.split(','))
+    
+    preview_data = video_preview(filepath, size)
+    if preview_data is None:
+        raise HTTPException(status_code=500, detail="Failed to generate video preview")
+    
+    return Response(content=preview_data, media_type="image/jpeg")
+
+@app.head("/video/{filename}/preview")
+async def head_video_preview(filename: str):
+    filepath = os.path.join(GAME_DATA_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Video file not found")
+    return Response(status_code=200)
 
 @app.get("/video/{filename}")
 async def get_video(filename: str):
