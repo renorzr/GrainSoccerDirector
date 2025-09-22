@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 import uuid
 from voicer import Voicer
 from task import Task, TaskStatus
-from utils import video_preview
+from utils import video_preview, events_path
 from clips import make_final_video as _make_final_video
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
@@ -52,8 +52,9 @@ task_lock = threading.Lock()
 
 
 def load_game_metadata(game_id: str):
-    game_data = yaml.safe_load(open(os.path.join(GAME_DATA_DIR, 'game.' + game_id + '.yaml'), "r", encoding="utf-8"))
-    
+    game_data = yaml.safe_load(open(os.path.join(GAME_DATA_DIR, game_id, 'game.yaml'), "r", encoding="utf-8"))
+    game_data['directory'] = os.path.join(GAME_DATA_DIR, game_id)
+
     if not game_data.get('logo_video'):
         game_data['logo_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'logo.mp4')
 
@@ -72,7 +73,7 @@ def run_make_video_task(game_id: str, segment: int):
         make_video_task.start()
         
         # Load game data
-        game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
+        game = Game(game_id, load_game_metadata(game_id))
         
         make_video_task.update_progress("analyzing", 0, 1)
         # Analyze events
@@ -105,7 +106,7 @@ def run_make_final_video_task(game_id: str):
     global make_video_task
     try:
         make_video_task.start()
-        game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
+        game = Game(game_id, load_game_metadata(game_id))
         _make_final_video(game, make_video_task)
         make_video_task.complete()
     except Exception as e:
@@ -118,7 +119,7 @@ def run_analyze_game_task(game_id: str, segment: int):
     global analyze_game_task
     try:
         analyze_game_task.start()
-        game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
+        game = Game(game_id, load_game_metadata(game_id))
         analyzer = EventAnalyzer(game, segment, analyze_game_task)
         analyzer.analyze(force=True)
         analyze_game_task.complete()
@@ -142,24 +143,23 @@ def api_root():
 
 @app.get("/games")
 async def get_games():
-    return {"games": [{'name': get_game_name(game.split('.')[1]), 'id': game.split('.')[1]} for game in os.listdir(GAME_DATA_DIR) if game.startswith('game.') and game.endswith('.yaml')]}
+    return {"games": list(filter(lambda x: x['name'], [{'name': get_game_name(game_id), 'id': game_id} for game_id in os.listdir(GAME_DATA_DIR)]))}
 
 @app.post("/game")
 async def create_game(game_obj: dict):
     print(f"create_game: {game_obj}")
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + game_obj['id'] + '.yaml')
-    if os.path.exists(save_path):
+    if get_game_name(game_obj['id']):
         raise HTTPException(status_code=400, detail="Game already exists")
 
-    os.makedirs(GAME_DATA_DIR, exist_ok=True)
-    with open(save_path, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.join(GAME_DATA_DIR, game_obj['id']), exist_ok=True)
+    with open(os.path.join(GAME_DATA_DIR, game_obj['id'], 'game.yaml'), "w", encoding="utf-8") as f:
         yaml.dump(game_obj, f)
 
     return {"id": game_obj['id'], "saved": True}
 
 @app.put("/game/{id}")
 async def update_game(id: str, game_obj: dict):
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml')
+    save_path = os.path.join(GAME_DATA_DIR, id, 'game.yaml')
     with open(save_path, "w", encoding="utf-8") as f:
         yaml.dump(game_obj, f)
     return {"id": id, "updated": True}
@@ -168,14 +168,14 @@ async def update_game(id: str, game_obj: dict):
 @app.get("/game/{id}")
 async def get_game(id: str):
     print(f"get_game: {id}")
-    save_path = os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml')
+    save_path = os.path.join(GAME_DATA_DIR, id, 'game.yaml')
     with open(save_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 @app.post("/game/{id}/events/{segment}")
 async def save_events(id: str, segment: int, request: dict):
     events = [Event.from_dict(event) for event in request.get('events', [])]
-    save_path = os.path.join(GAME_DATA_DIR, f'events.{id}-{segment}.csv')
+    save_path = events_path(id, segment)
 
     Event.save_to_csv(save_path, events)
 
@@ -183,8 +183,7 @@ async def save_events(id: str, segment: int, request: dict):
 
 @app.get("/game/{id}/events/{segment}")
 async def get_events(id: str, segment: int):
-    save_path = os.path.join(GAME_DATA_DIR, f'events.{id}-{segment}.csv')
-    csv_events = Event.load_from_csv(save_path)
+    csv_events = Event.load_from_csv(events_path(id, segment))
     return {"events": [event.to_dict() for event in csv_events]}
 
 @app.post("/game/{id}/analyze/{segment}")
@@ -217,7 +216,7 @@ async def get_comment_voice(id: str, segment: int, index: int):
     with open(save_path, 'rb') as f:
         game_data = pickle.load(f)
     comment = game_data['comments'][index]
-    voicer = Voicer(GAME_DATA_DIR, game_data['comments'])
+    voicer = Voicer(os.path.join(GAME_DATA_DIR, id), game_data['comments'])
 
     return FileResponse(voicer.make_text_voice(comment.text))
 
@@ -293,8 +292,8 @@ async def cancel_task(id: str, task_name: str):
 
 @app.post("/game/{id}/clean")
 async def clean_game(id: str):
-    if os.path.exists(os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml')):
-        os.remove(os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml'))
+    if os.path.exists(os.path.join(GAME_DATA_DIR, id, 'game.yaml')):
+        os.remove(os.path.join(GAME_DATA_DIR, id, 'game.yaml'))
 
     for segment in range(1, 5):
         if os.path.exists(game_data_path(id, segment)):
@@ -302,25 +301,23 @@ async def clean_game(id: str):
 
     return {"id": id, "cleaned": True}
 
-@app.post("/upload/presigned-url/{key}")
-async def get_presigned_upload_url(key: str):
-    return {"upload_url": get_upload_url(STORAGE_FOLDER + key)}
-
-@app.post("/upload/{key}")
-async def upload_file(key: str, file: UploadFile = File(...)):
+@app.post("/upload/{game_id}/{key}")
+async def upload_file(game_id: str, key: str, file: UploadFile = File(...)):
     if not key.lower().endswith(tuple(VIDEO_EXTENSIONS)):
         raise HTTPException(status_code=400, detail="Invalid file type")
-    with open(os.path.join(GAME_DATA_DIR, key), "wb") as f:
+    with open(os.path.join(GAME_DATA_DIR, game_id, key), "wb") as f:
         f.write(await file.read())
     return {"key": key, "uploaded": True}
 
-@app.get("/videos")
-async def get_videos():
-    return {"videos": [{'name': filename, 'size': os.path.getsize(os.path.join(GAME_DATA_DIR, filename)), 'last_modified': os.path.getmtime(os.path.join(GAME_DATA_DIR, filename)) * 1000, 'access_url': f'/video/{filename}'} for filename in os.listdir(GAME_DATA_DIR) if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
+@app.get("/videos/{game_id}")
+async def get_videos(game_id: str):
+    def path(game_id: str, filename: str):
+        return os.path.join(GAME_DATA_DIR, game_id, filename)
+    return {"videos": [{'name': filename, 'size': os.path.getsize(path(game_id, filename)), 'last_modified': os.path.getmtime(path(game_id, filename)) * 1000, 'access_url': f'/video/{game_id}/{filename}'} for filename in os.listdir(os.path.join(GAME_DATA_DIR, game_id)) if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
 
-@app.get("/video/{filename}/preview")
-async def get_video_preview(filename: str, request: Request):
-    filepath = os.path.join(GAME_DATA_DIR, filename)
+@app.get("/video/{game_id}/{filename}/preview")
+async def get_video_preview(game_id: str, filename: str, request: Request):
+    filepath = os.path.join(GAME_DATA_DIR, game_id, filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Video file not found")
 
@@ -333,32 +330,35 @@ async def get_video_preview(filename: str, request: Request):
     
     return Response(content=preview_data, media_type="image/jpeg")
 
-@app.head("/video/{filename}/preview")
-async def head_video_preview(filename: str):
-    filepath = os.path.join(GAME_DATA_DIR, filename)
+@app.head("/video/{game_id}/{filename}/preview")
+async def head_video_preview(game_id: str, filename: str):
+    filepath = os.path.join(GAME_DATA_DIR, game_id, filename)
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Video file not found")
     return Response(status_code=200)
 
-@app.get("/video/{filename}")
-async def get_video(filename: str):
+@app.get("/video/{game_id}/{filename}")
+async def get_video(game_id: str, filename: str):
     if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
         raise HTTPException(status_code=400, detail="Invalid file type")
-    return FileResponse(os.path.join(GAME_DATA_DIR, filename))
+    return FileResponse(os.path.join(GAME_DATA_DIR, game_id, filename))
 
-@app.delete("/video/{filename}")
-async def delete_video(filename: str):
+@app.delete("/video/{game_id}/{filename}")
+async def delete_video(game_id: str, filename: str):
     if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
         raise HTTPException(status_code=400, detail="Invalid file type")
-    os.remove(os.path.join(GAME_DATA_DIR, filename))
+    os.remove(os.path.join(GAME_DATA_DIR, game_id, filename))
     return {"filename": filename, "deleted": True}
 
 def get_game_name(id: str):
-    with open(os.path.join(GAME_DATA_DIR, 'game.' + id + '.yaml'), "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)['name']
+    try:
+        with open(os.path.join(GAME_DATA_DIR, id, 'game.yaml'), "r", encoding="utf-8") as f:
+            return yaml.safe_load(f).get('name')
+    except Exception as e:
+        return None
 
 def game_data_path(id: str, segment: int):
-    return os.path.join(GAME_DATA_DIR, 'game.' + id + '-' + str(segment) + '.pkl')
+    return os.path.join(GAME_DATA_DIR, id, f'game.{segment}.pkl')
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

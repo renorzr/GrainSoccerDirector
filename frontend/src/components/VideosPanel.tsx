@@ -7,7 +7,11 @@ import { Alert } from './Alert';
 import { VideoPreviewModal } from './VideoPreviewModal';
 import './VideosPanel.css';
 
-export const VideosPanel: React.FC = () => {
+interface VideosPanelProps {
+    gameId: string;
+}
+
+export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
     const [videos, setVideos] = useState<Video[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -18,13 +22,13 @@ export const VideosPanel: React.FC = () => {
 
     useEffect(() => {
         loadVideos();
-    }, []);
+    }, [gameId]);
 
     const loadVideos = async () => {
         try {
             setLoading(true);
             setError(null);
-            const videoList = await videoApi.getVideos();
+            const videoList = await videoApi.getVideos(gameId);
             setVideos(videoList);
         } catch (err) {
             setError(getErrorMessage(err));
@@ -42,7 +46,7 @@ export const VideosPanel: React.FC = () => {
             setUploadProgress(0);
             setError(null);
 
-            await videoApi.uploadVideo(file, (progress) => {
+            await videoApi.uploadVideo(gameId, file, (progress) => {
                 setUploadProgress(progress);
             });
 
@@ -65,7 +69,7 @@ export const VideosPanel: React.FC = () => {
         try {
             setDeletingVideo(videoName);
             setError(null);
-            await videoApi.deleteVideo(videoName);
+            await videoApi.deleteVideo(gameId, videoName);
             await loadVideos();
         } catch (err) {
             setError(getErrorMessage(err));

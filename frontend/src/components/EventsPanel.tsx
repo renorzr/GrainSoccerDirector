@@ -183,7 +183,7 @@ export const EventsPanel: React.FC<EventsPanelProps> = ({ gameId }) => {
             return null;
         }
         const videoName = game.videos[currentSegment - 1];
-        return videoName ? `/api/video/${encodeURIComponent(videoName)}` : null;
+        return videoName ? `/api/video/${gameId}/${encodeURIComponent(videoName)}` : null;
     };
 
     const jumpToVideoTime = (timeString: string) => {

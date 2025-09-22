@@ -7,7 +7,7 @@ import yaml
 
 # Description: This file contains the Game class which is used to store the game data.
 class Game:
-    def __init__(self, game_id, obj, directory):
+    def __init__(self, game_id, obj):
         self.game_id = game_id
         self.name = obj['name']
         self.start = 0
@@ -21,7 +21,7 @@ class Game:
         self.bgm = obj.get('bgm', os.path.join(directory, 'bgm.mp3'))
         self.prev_time = parse_time(obj.get('prev_time', 0))
         self.narrator = obj.get('narrator', '云说')
-        self.directory = directory
+        self.directory = obj['directory']
 
         with open(obj.get('scoreboard', os.path.join(directory, 'scoreboard.yaml')), 'r', encoding='utf-8') as f:
             self.scoreboard_props = yaml.safe_load(f)

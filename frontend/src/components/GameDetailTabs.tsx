@@ -56,7 +56,7 @@ export const GameDetailTabs: React.FC<GameDetailTabsProps> = ({
             case 'comments':
                 return <CommentsPanel gameId={game.id} />;
             case 'videos':
-                return <VideosPanel />;
+                return <VideosPanel gameId={game.id} />;
             default:
                 return null;
         }

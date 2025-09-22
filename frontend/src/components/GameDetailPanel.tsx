@@ -37,11 +37,11 @@ export const GameDetailPanel: React.FC<GameDetailPanelProps> = ({
 
     useEffect(() => {
         loadVideos();
-    }, []);
+    }, [game.id]);
 
     const loadVideos = async () => {
         try {
-            const videos = await videoApi.getVideos();
+            const videos = await videoApi.getVideos(game.id);
             setAvailableVideos(videos);
         } catch (error) {
             console.error('Failed to load videos:', error);
@@ -94,7 +94,7 @@ export const GameDetailPanel: React.FC<GameDetailPanelProps> = ({
 
     const previewVideo = (videoName: string) => {
         if (!videoName) return;
-        const videoUrl = videoApi.getVideoUrl(videoName);
+        const videoUrl = videoApi.getVideoUrl(game.id, videoName);
         setPreviewVideoUrl(videoUrl);
     };
 
@@ -173,9 +173,9 @@ export const GameDetailPanel: React.FC<GameDetailPanelProps> = ({
                     </div>
                 </div>
 
-                {/* 评论要求 */}
+                {/* 解说要求 */}
                 <div className="comment-requirement-section">
-                    <h3>💬 评论要求</h3>
+                    <h3>💬 解说要求</h3>
                     <div className="info-item">
                         <textarea
                             value={editForm.comment_requirement}

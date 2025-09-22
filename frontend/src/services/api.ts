@@ -115,17 +115,17 @@ export const commentsApi = {
 // Video API
 export const videoApi = {
     // Get video list
-    getVideos: async (): Promise<VideoListResponse['videos']> => {
-        const response: AxiosResponse<VideoListResponse> = await api.get('/videos');
+    getVideos: async (gameId: string): Promise<VideoListResponse['videos']> => {
+        const response: AxiosResponse<VideoListResponse> = await api.get(`/videos/${gameId}`);
         return response.data.videos;
     },
 
     // Upload video
-    uploadVideo: async (file: File, onProgress?: (progress: number) => void): Promise<string> => {
+    uploadVideo: async (gameId: string, file: File, onProgress?: (progress: number) => void): Promise<string> => {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await api.post(`/upload/${encodeURIComponent(file.name)}`, formData, {
+        const response = await api.post(`/upload/${gameId}/${encodeURIComponent(file.name)}`, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },
@@ -141,17 +141,17 @@ export const videoApi = {
     },
 
     // Delete video
-    deleteVideo: async (videoName: string): Promise<void> => {
-        await api.delete(`/video/${encodeURIComponent(videoName)}`);
+    deleteVideo: async (gameId: string, videoName: string): Promise<void> => {
+        await api.delete(`/video/${gameId}/${encodeURIComponent(videoName)}`);
     },
 
     // Get video URL
-    getVideoUrl: (videoName: string): string => {
-        return `${API_BASE}/video/${encodeURIComponent(videoName)}`;
+    getVideoUrl: (gameId: string, videoName: string): string => {
+        return `${API_BASE}/video/${gameId}/${encodeURIComponent(videoName)}`;
     },
 
-    getVideoPreviewUrl: (videoName: string, size: string = "200,150"): string => {
-        return `${API_BASE}/video/${encodeURIComponent(videoName)}/preview?size=${size}`;
+    getVideoPreviewUrl: (gameId: string, videoName: string, size: string = "200,150"): string => {
+        return `${API_BASE}/video/${gameId}/${encodeURIComponent(videoName)}/preview?size=${size}`;
     },
 };
 
@@ -166,6 +166,7 @@ export const taskApi = {
             if (error.response?.status === 404) {
                 return {
                     id: gameId,
+                    name: taskName,
                     status: 'no_task',
                     message: '暂无任务'
                 };

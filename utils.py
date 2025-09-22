@@ -51,10 +51,10 @@ def save_game_data(game_id: str, segment: int, game_data: dict):
         pickle.dump(game_data, f)
 
 def game_data_path(game_id: str, segment: int):
-    return os.path.join(GAME_DATA_DIR, 'game.' + game_id + '-' + str(segment) + '.pkl')
+    return os.path.join(GAME_DATA_DIR, game_id, 'game.' + str(segment) + '.pkl')
     
 def events_path(game_id: str, segment: int):
-    return os.path.join(GAME_DATA_DIR, 'events.' + game_id + '-' + str(segment) + '.csv')
+    return os.path.join(GAME_DATA_DIR, game_id, 'events.' + str(segment) + '.csv')
 
 def video_preview(filepath: str, size: tuple[int, int] = (200, 150)):
     if not os.path.exists(filepath):

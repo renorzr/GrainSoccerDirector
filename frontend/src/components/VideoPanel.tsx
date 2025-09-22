@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, RefreshCw, Video, FileVideo, ChevronDown } from 'lucide-react';
+import { Play, Square, RefreshCw, Video, FileVideo, ChevronDown, Trash2, Download } from 'lucide-react';
 import { gameApi, taskApi, videoApi } from '../services/api';
 import { Game, Task } from '../types';
 import { getErrorMessage } from '../utils';
@@ -164,7 +164,7 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
     };
 
     const handleVideoPreview = (videoName: string) => {
-        const videoUrl = videoApi.getVideoUrl(videoName);
+        const videoUrl = videoApi.getVideoUrl(gameId, videoName);
         setPreviewModal({
             isOpen: true,
             videoUrl: videoUrl
@@ -178,9 +178,52 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
         });
     };
 
+    const handleDeleteVideo = async (videoName: string) => {
+        if (!window.confirm(`确定要删除视频 "${videoName}" 吗？`)) {
+            return;
+        }
+
+        try {
+            await videoApi.deleteVideo(gameId, videoName);
+            // 重新加载游戏数据以更新视频列表
+            await loadGame();
+        } catch (err) {
+            setError(getErrorMessage(err));
+        }
+    };
+
+    const handleDownloadVideo = async (videoName: string) => {
+        try {
+            const videoUrl = videoApi.getVideoUrl(gameId, videoName);
+
+            // 使用fetch获取文件，然后创建blob URL进行下载
+            const response = await fetch(videoUrl);
+            if (!response.ok) {
+                throw new Error('下载失败');
+            }
+
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = videoName;
+            link.style.display = 'none';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // 清理blob URL
+            window.URL.revokeObjectURL(blobUrl);
+        } catch (err) {
+            setError(`下载视频失败: ${getErrorMessage(err)}`);
+        }
+    };
+
     const checkVideoExists = async (filename: string): Promise<boolean> => {
         try {
-            const response = await fetch(videoApi.getVideoPreviewUrl(filename), { method: 'HEAD' });
+            const response = await fetch(videoApi.getVideoPreviewUrl(gameId, filename), { method: 'HEAD' });
             return response.ok;
         } catch {
             return false;
@@ -203,16 +246,22 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
                 {game?.videos.map((video, index) => (
                     <VideoPreviewCard
                         key={index}
+                        gameId={gameId}
                         name={`output-${index + 1}.mp4`}
                         title={`第${index + 1}节`}
                         onPreview={() => handleVideoPreview(`output-${index + 1}.mp4`)}
+                        onDelete={handleDeleteVideo}
+                        onDownload={handleDownloadVideo}
                     />
                 ))}
                 <VideoPreviewCard
                     key="final"
+                    gameId={gameId}
                     name={`final-${gameId}.mp4`}
                     title={`全场比赛`}
                     onPreview={() => handleVideoPreview(`final-${gameId}.mp4`)}
+                    onDelete={handleDeleteVideo}
+                    onDownload={handleDownloadVideo}
                 />
             </div>
 
@@ -382,26 +431,30 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
 
 // 视频预览卡片组件
 interface VideoPreviewCardProps {
+    gameId: string;
     name: string;
     title: string;
     onPreview: (name: string) => void;
+    onDelete?: (name: string) => void;
+    onDownload?: (name: string) => void;
 }
 
-const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ name, title, onPreview }) => {
+const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ gameId, name, title, onPreview, onDelete, onDownload }) => {
     const [videoExists, setVideoExists] = useState<boolean | null>(null);
     const [imageError, setImageError] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
 
     useEffect(() => {
         const checkExists = async () => {
             try {
-                const response = await fetch(videoApi.getVideoPreviewUrl(name), { method: 'HEAD' });
+                const response = await fetch(videoApi.getVideoPreviewUrl(gameId, name), { method: 'HEAD' });
                 setVideoExists(response.ok);
             } catch {
                 setVideoExists(false);
             }
         };
         checkExists();
-    }, [name]);
+    }, [name, gameId]);
 
     const handleClick = () => {
         if (videoExists) {
@@ -413,17 +466,33 @@ const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ name, title, onPrev
         setImageError(true);
     };
 
+    const handleDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onDelete && videoExists) {
+            onDelete(name);
+        }
+    };
+
+    const handleDownload = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onDownload && videoExists) {
+            onDownload(name);
+        }
+    };
+
     return (
         <div
             className={`video-preview-card ${videoExists ? 'exists' : 'placeholder'}`}
             onClick={handleClick}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
         >
             <div className="video-preview-content">
                 {videoExists ? (
                     <>
                         {!imageError ? (
                             <img
-                                src={videoApi.getVideoPreviewUrl(name, "200,150")}
+                                src={videoApi.getVideoPreviewUrl(gameId, name, "200,150")}
                                 alt={name}
                                 onError={handleImageError}
                             />
@@ -435,6 +504,25 @@ const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ name, title, onPrev
                         <div className="video-overlay">
                             <Play size={24} />
                         </div>
+                        {/* 删除和下载按钮 */}
+                        {isHovered && (
+                            <div className="video-action-buttons">
+                                <button
+                                    className="video-action-btn delete-btn"
+                                    onClick={handleDelete}
+                                    title="删除视频"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
+                                <button
+                                    className="video-action-btn download-btn"
+                                    onClick={handleDownload}
+                                    title="下载视频"
+                                >
+                                    <Download size={16} />
+                                </button>
+                            </div>
+                        )}
                     </>
                 ) : (
                     <div className="video-placeholder">
