@@ -10,8 +10,9 @@ class TaskStatus(Enum):
     CANCELLED = "cancelled"
 
 class Task:
-    def __init__(self, id, stages):
+    def __init__(self, id, name, stages):
         self.id = id
+        self.name = name
         self.status = TaskStatus.PENDING
         self.created_at = datetime.now().isoformat()
         self.started_at = None
@@ -48,9 +49,6 @@ class Task:
         return self._cancelled
 
     def update_progress(self, stage, current_step, total_steps):
-        if total_steps < 100 or current_step % 100 == 0:
-            print(f"start update_progress {stage} {current_step} {total_steps}")
-        
         progress = 0
         for s in self.stages:
             if s[0] == stage:
@@ -59,14 +57,13 @@ class Task:
             else:
                 progress += s[1]
 
-        if total_steps < 100 or current_step % 100 == 0:
-            print(f"done update_progress {stage} {current_step} {total_steps} {progress}")
         self.progress = progress
         self.stage = stage
 
     def to_dict(self):
         return {
             "id": self.id,
+            "name": self.name,
             "status": self.status,
             "created_at": self.created_at,
             "started_at": self.started_at,

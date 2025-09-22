@@ -48,7 +48,8 @@ class Editor:
         self.end_time = game_data['end_time']
 
     def load_logo_video(self):
-        logo_video_cap = cv2.VideoCapture(self.game.logo_video)
+        logo_video_path = self.game.logo_video if os.path.isabs(self.game.logo_video) else os.path.join(self.game.directory, self.game.logo_video)
+        logo_video_cap = cv2.VideoCapture(logo_video_path)
         fps = logo_video_cap.get(cv2.CAP_PROP_FPS)
         frames = []
         while True:
@@ -60,7 +61,7 @@ class Editor:
         duration = len(frames) / fps
         logo_video_cap.release()
         self.logo_video = {"fps": fps, "duration": duration, "frames": frames}
-        print(f"loading logo video {self.game.logo_video} with {self.logo_video['fps']} fps and {self.logo_video['duration']} duration")
+        print(f"loading logo video {logo_video_path} with {self.logo_video['fps']} fps and {self.logo_video['duration']} duration")
 
     def game_video(self, segment):
         return os.path.join(self.game.directory, self.game.videos[segment - 1])
@@ -87,7 +88,7 @@ class Editor:
         print(f"found {len(replay_events)} replay events")
         self.calculate_logo_times(replay_events)
 
-        cap = cv2.VideoCapture(os.path.join(self.game.directory, self.game.videos[self.segment - 1]))
+        cap = cv2.VideoCapture(self.game_video(self.segment))
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -152,7 +153,7 @@ class Editor:
         temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
         print(f"creating output audio {TEMP_AUDIO_NAME}")
         self.voicer.make_voice(self.task)
-        audio_clips = [VideoFileClip(os.path.join(self.game.directory, self.game.videos[self.segment - 1])).audio]
+        audio_clips = [VideoFileClip(self.game_video(self.segment)).audio]
         last_comment = None
         comment_count = 0
         for comment in self.comments:
@@ -282,50 +283,6 @@ class Editor:
                 logging.info(f"replay event: {nearest_event.type.name} {format_time(nearest_event.time)} at {format_time(center_time)}")
         
         return [e for e in replay_events if e.replay_time]
-
-    # 创建精彩瞬间片段
-    def create_hightlights_clip(self, game_clip, type=None, comment=None):
-        clips = []
-        logo_clips = []
-        last_highlight_end = 0
-
-        for event in self.events:
-            if Tag.Replay in event.tags:
-                logo_clips.append(self.create_logo_clip(last_highlight_end))
-                highlight_clip = game_clip.subclipped(event.time - REPLAY_BUFFER, event.time + REPLAY_BUFFER + HIGHLIGHT_EXTEND).with_start(last_highlight_end)
-                clips.append(highlight_clip)
-                replay_clip = game_clip.subclipped(event.time - REPLAY_BUFFER, event.time + REPLAY_BUFFER).with_effects([MultiplySpeed(0.5)]).without_audio().with_start(highlight_clip.end)
-                clips.append(replay_clip)
-                last_highlight_end = replay_clip.end
-
-        highlights_clip = CompositeVideoClip(clips + logo_clips)
-        audio_clips = [highlights_clip.audio]
-
-        if comment:
-            voice = self.voicer.make_text_voice(comment)
-            voice_clip = AudioFileClip(voice).with_volume_scaled(2)
-            audio_clips.append(voice_clip)
-            audio_clips[0] = audio_clips[0].subclipped(voice_clip.duration, audio_clips[0].duration).with_start(voice_clip.duration)
-
-        if self.bgm:
-            bgm_clips = []
-            last_bgm_end = 0
-
-            while last_bgm_end < highlights_clip.duration:
-                if highlights_clip.end - last_bgm_end > self.bgm.duration:
-                    current_bgm_clip = self.bgm.copy()
-                else:
-                    current_bgm_clip = self.bgm.subclipped(0, highlights_clip.duration - last_bgm_end)
-
-                bgm_clips.append(current_bgm_clip.with_start(last_bgm_end))
-                last_bgm_end = bgm_clips[-1].end
-                
-            audio_clips.extend(bgm_clips)
-
-        if len(audio_clips) > 1:
-            highlights_clip.audio = CompositeAudioClip(audio_clips)
-
-        return highlights_clip
 
     def update_progress(self, stage, progress, total):
         if self.task:

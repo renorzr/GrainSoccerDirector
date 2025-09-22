@@ -21,6 +21,7 @@ import uuid
 from voicer import Voicer
 from task import Task, TaskStatus
 from utils import video_preview
+from clips import make_final_video as _make_final_video
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
 VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv").split(",")
@@ -55,6 +56,9 @@ def load_game_metadata(game_id: str):
     
     if not game_data.get('logo_video'):
         game_data['logo_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'logo.mp4')
+
+    if not game_data.get('brand_video'):
+        game_data['brand_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'brand.mp4')
 
     if not game_data.get('scoreboard'):
         game_data['scoreboard'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'scoreboard.yaml')
@@ -92,6 +96,19 @@ def run_make_video_task(game_id: str, segment: int):
             make_video_task.completed_at = datetime.now().isoformat()
     except Exception as e:
         # print stack trace
+        print(traceback.format_exc())
+        make_video_task.status = TaskStatus.FAILED.value
+        make_video_task.error = str(e)
+        make_video_task.completed_at = datetime.now().isoformat()
+
+def run_make_final_video_task(game_id: str):
+    global make_video_task
+    try:
+        make_video_task.start()
+        game = Game(game_id, load_game_metadata(game_id), GAME_DATA_DIR)
+        _make_final_video(game, make_video_task)
+        make_video_task.complete()
+    except Exception as e:
         print(traceback.format_exc())
         make_video_task.status = TaskStatus.FAILED.value
         make_video_task.error = str(e)
@@ -176,7 +193,7 @@ async def analyze_game(id: str, segment: int):
     if analyze_game_task and (analyze_game_task.status == TaskStatus.RUNNING or analyze_game_task.status == TaskStatus.PENDING):
         raise HTTPException(status_code=409, detail=f"Another task is already running for game: {analyze_game_task}")
 
-    analyze_game_task = Task(id, [("analyzing", 100)])
+    analyze_game_task = Task(id, "analyze_game", [("analyzing", 100)])
     thread = threading.Thread(target=run_analyze_game_task, args=(id, segment))
     thread.daemon = True
     thread.start()
@@ -228,7 +245,7 @@ async def make_video(id: str, segment: int):
         if make_video_task and (make_video_task.status == TaskStatus.RUNNING or make_video_task.status == TaskStatus.PENDING):
             raise HTTPException(status_code=409, detail=f"Another task is already running for game: {make_video_task}")
         
-        make_video_task = Task(id, [("analyzing", 10), ("output_video", 70), ("make_voice", 5), ("output_audio", 5), ("add_audio", 10)])
+        make_video_task = Task(id, f"make_video_{segment}", [("analyzing", 10), ("output_video", 70), ("make_voice", 5), ("output_audio", 5), ("add_audio", 10)])
     
     # Start the task in a separate thread
     thread = threading.Thread(target=run_make_video_task, args=(id, segment))
@@ -236,6 +253,21 @@ async def make_video(id: str, segment: int):
     thread.start()
     
     return {"id": id, "task_id": id, "status": TaskStatus.PENDING.value, "message": "Video making task started"}
+
+@app.post("/game/{id}/final")
+async def make_final_video(id: str):
+    global make_video_task
+    with task_lock:
+        if make_video_task and (make_video_task.status == TaskStatus.RUNNING or make_video_task.status == TaskStatus.PENDING):
+            raise HTTPException(status_code=409, detail=f"Another task is already running for game: {make_video_task}")
+        
+        make_video_task = Task(id, "make_final_video", [("chunk", 50), ("frame_index", 50)])
+    
+    thread = threading.Thread(target=run_make_final_video_task, args=(id,))
+    thread.daemon = True
+    thread.start()
+    
+    return {"id": id, "task_id": id, "status": TaskStatus.PENDING.value, "message": "Final video making task started"}
 
 @app.get("/game/{id}/task/{task_name}/status")
 async def get_task_status(id: str, task_name: str):

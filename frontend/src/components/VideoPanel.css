@@ -153,6 +153,80 @@
     min-width: 140px;
 }
 
+/* 下拉按钮样式 */
+.dropdown-button-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.dropdown-main-button {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none;
+    min-width: 120px;
+}
+
+.dropdown-toggle {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.2);
+    min-width: 40px;
+    padding: 0.5rem;
+}
+
+.dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 5px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    margin-top: 2px;
+    overflow: hidden;
+}
+
+.dropdown-item {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: none;
+    background: white;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.dropdown-item:hover:not(:disabled) {
+    background: #f8f9fa;
+}
+
+.dropdown-item:disabled {
+    color: #6c757d;
+    cursor: not-allowed;
+    background: #f8f9fa;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: #e9ecef;
+    margin: 0.25rem 0;
+}
+
+.final-video-item {
+    font-weight: 500;
+    color: #1976d2;
+}
+
+.final-video-item:disabled {
+    color: #6c757d;
+    font-weight: normal;
+}
+
 .task-status-container {
     background: #f8f9fa;
     border-radius: 8px;
@@ -354,6 +428,19 @@
     .video-actions .btn {
         min-width: auto;
         width: 100%;
+    }
+
+    .dropdown-button-container {
+        width: 100%;
+    }
+
+    .dropdown-main-button {
+        flex: 1;
+        min-width: auto;
+    }
+
+    .dropdown-toggle {
+        min-width: 50px;
     }
 
     .segment-selector {

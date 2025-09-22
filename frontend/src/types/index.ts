@@ -68,6 +68,7 @@ export interface VideoListResponse {
 // Task Types
 export interface Task {
     id: string;
+    name: string;
     status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'no_task';
     stage?: string;
     message?: string;

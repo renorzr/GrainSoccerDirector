@@ -15,7 +15,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             <header className="app-header">
                 <nav className="nav">
                     <Link to="/" className="nav-brand">
-                        ⚽ 足球导演
+                        ⚽ 小小谷粒足球导播
                     </Link>
                     <div className="nav-links">
                         {isGameDetail && (

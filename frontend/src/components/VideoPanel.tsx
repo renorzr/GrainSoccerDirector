@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, RefreshCw, Video, FileVideo } from 'lucide-react';
+import { Play, Square, RefreshCw, Video, FileVideo, ChevronDown } from 'lucide-react';
 import { gameApi, taskApi, videoApi } from '../services/api';
 import { Game, Task } from '../types';
 import { getErrorMessage } from '../utils';
@@ -24,6 +24,8 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
         isOpen: false,
         videoUrl: ''
     });
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [allVideosGenerated, setAllVideosGenerated] = useState(false);
 
     useEffect(() => {
         loadGame();
@@ -37,9 +39,40 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
         }
     }, [polling]);
 
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Element;
+            if (!target.closest('.dropdown-button-container')) {
+                setDropdownOpen(false);
+            }
+        };
+
+        if (dropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [dropdownOpen]);
+
     const loadGame = async () => {
         const game = await gameApi.getGame(gameId);
         setGame(game);
+        await checkAllVideosGenerated(game);
+    };
+
+    const checkAllVideosGenerated = async (game: Game) => {
+        if (!game?.videos) {
+            setAllVideosGenerated(false);
+            return;
+        }
+
+        const videoChecks = await Promise.all(
+            game.videos.map(async (_, index) => {
+                return await checkVideoExists(`output-${index + 1}.mp4`);
+            })
+        );
+
+        const allGenerated = videoChecks.every(exists => exists);
+        setAllVideosGenerated(allGenerated);
     };
 
     const loadTaskStatus = async () => {
@@ -49,7 +82,7 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
             const taskData = await taskApi.getTaskStatus(gameId, 'make_video');
             setTask(taskData);
 
-            // 如果任务完成或失败，停止轮询
+            // 如果任务完成或失败，停止轮询并清除任务状态
             if (taskData.status === 'completed' || taskData.status === 'failed' || taskData.status === 'cancelled') {
                 setPolling(false);
             }
@@ -60,11 +93,25 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
         }
     };
 
-    const handleStartVideoMaking = async () => {
+    const handleStartVideoMaking = async (segment: number) => {
         try {
             setStarting(true);
             setError(null);
-            await taskApi.startVideoMaking(gameId, selectedSegment);
+            await taskApi.startVideoMaking(gameId, segment);
+            setPolling(true);
+            await loadTaskStatus();
+        } catch (err) {
+            setError(getErrorMessage(err));
+        } finally {
+            setStarting(false);
+        }
+    };
+
+    const handleStartFinalVideoMaking = async () => {
+        try {
+            setStarting(true);
+            setError(null);
+            await taskApi.startFinalVideoMaking(gameId);
             setPolling(true);
             await loadTaskStatus();
         } catch (err) {
@@ -116,8 +163,8 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
         return new Date(dateString).toLocaleString('zh-CN');
     };
 
-    const handleVideoPreview = (videoIndex: number) => {
-        const videoUrl = videoApi.getVideoUrl(`output-${videoIndex + 1}.mp4`);
+    const handleVideoPreview = (videoName: string) => {
+        const videoUrl = videoApi.getVideoUrl(videoName);
         setPreviewModal({
             isOpen: true,
             videoUrl: videoUrl
@@ -133,7 +180,7 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
 
     const checkVideoExists = async (filename: string): Promise<boolean> => {
         try {
-            const response = await fetch(videoApi.getVideoUrl(filename), { method: 'HEAD' });
+            const response = await fetch(videoApi.getVideoPreviewUrl(filename), { method: 'HEAD' });
             return response.ok;
         } catch {
             return false;
@@ -156,53 +203,64 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
                 {game?.videos.map((video, index) => (
                     <VideoPreviewCard
                         key={index}
-                        index={index}
-                        onPreview={handleVideoPreview}
+                        name={`output-${index + 1}.mp4`}
+                        title={`第${index + 1}节`}
+                        onPreview={() => handleVideoPreview(`output-${index + 1}.mp4`)}
                     />
                 ))}
+                <VideoPreviewCard
+                    key="final"
+                    name={`final-${gameId}.mp4`}
+                    title={`全场比赛`}
+                    onPreview={() => handleVideoPreview(`final-${gameId}.mp4`)}
+                />
             </div>
 
             <h3>视频生成</h3>
-
-            <div className="video-generation-header">
-                <div className="segment-selector">
-                    <label>选择节数:</label>
-                    <select
-                        value={selectedSegment}
-                        onChange={(e) => setSelectedSegment(parseInt(e.target.value))}
-                        disabled={starting || cancelling}
-                    >
-                        {game?.videos.map((_, index) => (
-                            <option key={index} value={index + 1}>
-                                第{index + 1}节
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </div>
 
             {error && (
                 <Alert type="error" message={error} onClose={() => setError(null)} />
             )}
 
             <div className="video-actions">
-                <button
-                    className="btn btn-primary"
-                    onClick={handleStartVideoMaking}
-                    disabled={starting || cancelling || (task?.status === 'running')}
-                >
-                    {starting ? (
-                        <>
-                            <div className="loading" style={{ width: '16px', height: '16px' }}></div>
-                            启动中...
-                        </>
-                    ) : (
-                        <>
-                            <Play size={16} style={{ marginRight: '0.5rem' }} />
-                            开始生成视频
-                        </>
+                <div className="dropdown-button-container">
+                    <button
+                        className="btn btn-primary dropdown-toggle"
+                        onClick={() => setDropdownOpen(!dropdownOpen)}
+                        disabled={starting || cancelling || (task?.status === 'running')}
+                    >
+                        开始生成视频
+                        <ChevronDown size={16} />
+                    </button>
+                    {dropdownOpen && (
+                        <div className="dropdown-menu">
+                            {game?.videos.map((_, index) => (
+                                <button
+                                    key={index}
+                                    className="dropdown-item"
+                                    onClick={() => {
+                                        handleStartVideoMaking(index + 1);
+                                        setDropdownOpen(false);
+                                    }}
+                                    disabled={starting || cancelling || (task?.status === 'running')}
+                                >
+                                    生成第{index + 1}节视频
+                                </button>
+                            ))}
+                            <div className="dropdown-divider"></div>
+                            <button
+                                className="dropdown-item final-video-item"
+                                onClick={() => {
+                                    handleStartFinalVideoMaking();
+                                    setDropdownOpen(false);
+                                }}
+                                disabled={starting || cancelling || (task?.status === 'running') || !allVideosGenerated}
+                            >
+                                生成最终比赛视频
+                            </button>
+                        </div>
                     )}
-                </button>
+                </div>
 
                 <button
                     className="btn btn-danger"
@@ -250,21 +308,16 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
                                 </div>
 
                                 <div className="info-row">
-                                    <span className="label">任务ID:</span>
-                                    <span className="value">{task.id}</span>
+                                    <span className="label">任务类型:</span>
+                                    <span className="value">
+                                        {task.name}
+                                    </span>
                                 </div>
 
                                 <div className="info-row">
                                     <span className="label">当前步骤:</span>
                                     <span className="value">{task.stage}</span>
                                 </div>
-
-                                {task.created_at && (
-                                    <div className="info-row">
-                                        <span className="label">创建时间:</span>
-                                        <span className="value">{formatDateTime(task.created_at)}</span>
-                                    </div>
-                                )}
 
                                 {task.started_at && (
                                     <div className="info-row">
@@ -329,29 +382,30 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
 
 // 视频预览卡片组件
 interface VideoPreviewCardProps {
-    index: number;
-    onPreview: (index: number) => void;
+    name: string;
+    title: string;
+    onPreview: (name: string) => void;
 }
 
-const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ index, onPreview }) => {
+const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ name, title, onPreview }) => {
     const [videoExists, setVideoExists] = useState<boolean | null>(null);
     const [imageError, setImageError] = useState(false);
 
     useEffect(() => {
         const checkExists = async () => {
             try {
-                const response = await fetch(videoApi.getVideoPreviewUrl(`output-${index + 1}.mp4`), { method: 'HEAD' });
+                const response = await fetch(videoApi.getVideoPreviewUrl(name), { method: 'HEAD' });
                 setVideoExists(response.ok);
             } catch {
                 setVideoExists(false);
             }
         };
         checkExists();
-    }, [index]);
+    }, [name]);
 
     const handleClick = () => {
         if (videoExists) {
-            onPreview(index);
+            onPreview(name);
         }
     };
 
@@ -369,8 +423,8 @@ const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ index, onPreview })
                     <>
                         {!imageError ? (
                             <img
-                                src={videoApi.getVideoPreviewUrl(`output-${index + 1}.mp4`, "200,150")}
-                                alt={`第${index + 1}节`}
+                                src={videoApi.getVideoPreviewUrl(name, "200,150")}
+                                alt={name}
                                 onError={handleImageError}
                             />
                         ) : (
@@ -390,7 +444,7 @@ const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ index, onPreview })
                 )}
             </div>
             <div className="video-preview-label">
-                第{index + 1}节
+                {title}
             </div>
         </div>
     );

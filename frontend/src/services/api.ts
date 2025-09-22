@@ -179,6 +179,11 @@ export const taskApi = {
         await api.post(`/game/${gameId}/make/${segment}`);
     },
 
+    // Start final video making task
+    startFinalVideoMaking: async (gameId: string): Promise<void> => {
+        await api.post(`/game/${gameId}/final`);
+    },
+
     // Start analyze game task
     startAnalyzeGame: async (gameId: string, segment: number): Promise<void> => {
         await api.post(`/game/${gameId}/analyze/${segment}`);

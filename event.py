@@ -9,6 +9,7 @@ from enum import Enum
     
 # 事件标签
 class Tag(Enum):
+    Placeholder = 0,     # 占位符
     Replay = 1,   # 发生的事件需要重放
     Deadball = 2, # 比赛进入死球状态
     Liveball = 3, # 比赛进入活球状态
@@ -89,9 +90,12 @@ class Event:
     
     @classmethod
     def from_dict(cls, obj):
+        print(f"from_dict: {obj}")
+        eventType = EventType[obj['type']]
         tag_str = obj.get('tags') or ''
-        tags = [Tag[s] for s in tag_str.split(',')] if tag_str else []
-        return cls(obj.get('id'), EventType[obj['type']], obj['time'], obj.get('team'), obj.get('player'), obj.get('desc'), tags)
+        tags = [Tag[s] for s in tag_str.split(',')] if tag_str else eventType.default_tags
+        print(f"tags: {tags}")
+        return cls(obj.get('id'), eventType, obj['time'], obj.get('team'), obj.get('player'), obj.get('desc'), tags)
 
     def to_dict(self):
         """Convert Event object to JSON-serializable dictionary"""
