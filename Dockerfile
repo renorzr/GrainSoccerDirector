@@ -25,14 +25,15 @@ WORKDIR /app
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    libgl1-mesa-glx \
+    libgl1-mesa-dri \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libgomp1 \
     libgstreamer1.0-0 \
     libgstreamer-plugins-base1.0-0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制 Python 依赖文件
