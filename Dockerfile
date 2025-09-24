@@ -7,8 +7,8 @@ WORKDIR /app/frontend
 # 复制前端依赖文件
 COPY frontend/package*.json ./
 
-# 安装前端依赖
-RUN npm ci --only=production
+# 安装前端依赖（包括开发依赖，因为构建需要 TypeScript）
+RUN npm ci
 
 # 复制前端源代码
 COPY frontend/ ./
@@ -45,7 +45,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY *.py ./
 COPY resources/ ./resources/
 COPY fonts/ ./fonts/
-COPY voices/ ./voices/
 
 # 从第一阶段复制构建好的前端文件
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
