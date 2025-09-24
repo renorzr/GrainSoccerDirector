@@ -22,6 +22,15 @@ const api = axios.create({
     },
 });
 
+// Separate axios instance for file uploads with longer timeout
+const uploadApi = axios.create({
+    baseURL: API_BASE,
+    timeout: 300000, // 5 minutes for uploads
+    headers: {
+        'Content-Type': 'multipart/form-data',
+    },
+});
+
 // Request interceptor
 api.interceptors.request.use(
     (config) => {
@@ -42,6 +51,32 @@ api.interceptors.response.use(
     },
     (error) => {
         console.error('API Response Error:', error);
+        if (error.response?.data?.detail) {
+            error.message = error.response.data.detail;
+        }
+        return Promise.reject(error);
+    }
+);
+
+// Upload API interceptors (same as regular API)
+uploadApi.interceptors.request.use(
+    (config) => {
+        console.log(`Upload API Request: ${config.method?.toUpperCase()} ${config.url}`);
+        return config;
+    },
+    (error) => {
+        console.error('Upload API Request Error:', error);
+        return Promise.reject(error);
+    }
+);
+
+uploadApi.interceptors.response.use(
+    (response) => {
+        console.log(`Upload API Response: ${response.status} ${response.config.url}`);
+        return response;
+    },
+    (error) => {
+        console.error('Upload API Response Error:', error);
         if (error.response?.data?.detail) {
             error.message = error.response.data.detail;
         }
@@ -110,6 +145,10 @@ export const commentsApi = {
     analyzeGame: async (gameId: string, segment: number): Promise<void> => {
         await api.post(`/game/${gameId}/analyze/${segment}`);
     },
+
+    getVoiceUrl: (gameId: string, segment: number, commentIndex: number): string => {
+        return `${API_BASE}/game/${gameId}/comment/${segment}/${commentIndex}/voice`;
+    },
 };
 
 // Video API
@@ -125,10 +164,7 @@ export const videoApi = {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await api.post(`/upload/${gameId}/${encodeURIComponent(file.name)}`, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
+        const response = await uploadApi.post(`/upload/${gameId}/${encodeURIComponent(file.name)}`, formData, {
             onUploadProgress: (progressEvent) => {
                 if (onProgress && progressEvent.total) {
                     const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -153,12 +189,34 @@ export const videoApi = {
     getVideoPreviewUrl: (gameId: string, videoName: string, size: string = "200,150"): string => {
         return `${API_BASE}/video/${gameId}/${encodeURIComponent(videoName)}/preview?size=${size}`;
     },
+
+    // Join videos
+    joinVideos: async (gameId: string, videos: string[]): Promise<{ id: string; task_id: string; status: string; message: string; output_file: string }> => {
+        const response = await api.post(`/videos/${gameId}/join`, videos);
+        return response.data;
+    },
+
+    // Trim video
+    trimVideo: async (gameId: string, filename: string, startTime: number, endTime: number): Promise<{ id: string; task_id: string; status: string; message: string; output_file: string }> => {
+        const response = await api.post(`/video/${gameId}/${encodeURIComponent(filename)}/trim`, null, {
+            params: { start_time: startTime, end_time: endTime }
+        });
+        return response.data;
+    },
+
+    // Rename video
+    renameVideo: async (gameId: string, filename: string, newFilename: string): Promise<{ filename: string; new_filename: string; renamed: boolean }> => {
+        const response = await api.post(`/video/${gameId}/${encodeURIComponent(filename)}/rename`, null, {
+            params: { new_filename: newFilename }
+        });
+        return response.data;
+    },
 };
 
 // Task API
 export const taskApi = {
     // Get task status
-    getTaskStatus: async (gameId: string, taskName: 'make_video' | 'analyze_game'): Promise<Task> => {
+    getTaskStatus: async (gameId: string, taskName: 'make_video' | 'analyze_game' | 'preprocess_video'): Promise<Task> => {
         try {
             const response: AxiosResponse<Task> = await api.get(`/game/${gameId}/task/${taskName}/status`);
             return response.data;
@@ -191,7 +249,7 @@ export const taskApi = {
     },
 
     // Cancel task
-    cancelTask: async (gameId: string, taskName: 'make_video' | 'analyze_game'): Promise<void> => {
+    cancelTask: async (gameId: string, taskName: 'make_video' | 'analyze_game' | 'preprocess_video'): Promise<void> => {
         await api.post(`/game/${gameId}/task/${taskName}/cancel`);
     },
 };

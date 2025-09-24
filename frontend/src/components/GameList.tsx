@@ -39,7 +39,7 @@ export const GameList: React.FC = () => {
     const handleGameCreated = (gameId: string) => {
         setShowCreateModal(false);
         // 跳转到比赛详情页面
-        navigate(`/game/${gameId}`);
+        navigate(`/g/${gameId}`);
     };
 
     const handleDeleteGame = async (gameId: string) => {
@@ -59,7 +59,7 @@ export const GameList: React.FC = () => {
     };
 
     const handleEnterGame = (gameId: string) => {
-        navigate(`/game/${gameId}`);
+        navigate(`/g/${gameId}`);
     };
 
     if (loading) {

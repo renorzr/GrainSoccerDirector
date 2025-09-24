@@ -21,7 +21,7 @@ import uuid
 from voicer import Voicer
 from task import Task, TaskStatus
 from utils import video_preview, events_path
-from clips import make_final_video as _make_final_video
+from clips import make_final_video as _make_final_video, join_videos as _join_videos, trim_video as _trim_video, get_video_props
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
 VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv").split(",")
@@ -48,6 +48,7 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 # Global task management
 make_video_task: Task = None
 analyze_game_task: Task = None
+preprocess_video_task: Task = None
 task_lock = threading.Lock()
 
 
@@ -65,6 +66,33 @@ def load_game_metadata(game_id: str):
         game_data['scoreboard'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'scoreboard.yaml')
 
     return game_data
+
+def run_join_videos_task(game_id: str, videos: list[str], output_file: str):
+    global preprocess_video_task
+    try:
+        preprocess_video_task.start()
+        game = Game(game_id, load_game_metadata(game_id))
+        _join_videos(game, videos, output_file, preprocess_video_task)
+        preprocess_video_task.complete()
+    except Exception as e:
+        print(traceback.format_exc())
+        preprocess_video_task.status = TaskStatus.FAILED.value
+        preprocess_video_task.error = str(e)
+        preprocess_video_task.completed_at = datetime.now().isoformat()
+
+def run_trim_video_task(game_id: str, video: str, start_time: float, end_time: float, output_file: str):
+    global preprocess_video_task
+    try:
+        preprocess_video_task.start()
+        game = Game(game_id, load_game_metadata(game_id))
+        _trim_video(game, video, start_time, end_time, output_file, preprocess_video_task)
+        preprocess_video_task.complete()
+    except Exception as e:
+        print(traceback.format_exc())
+        preprocess_video_task.status = TaskStatus.FAILED.value
+        preprocess_video_task.error = str(e)
+        preprocess_video_task.completed_at = datetime.now().isoformat()
+
 
 def run_make_video_task(game_id: str, segment: int):
     """Background task to make video"""
@@ -135,7 +163,15 @@ def run_analyze_game_task(game_id: str, segment: int):
 
 @app.get("/")
 def root():
-    return FileResponse("frontend/index.html")
+    return FileResponse("frontend/dist/index.html")
+
+@app.get("/g/{game_id}")
+def game_detail(game_id: str):
+    return FileResponse(f"frontend/dist/index.html")
+
+@app.get("/assets/{path:path}")
+def assets(path: str):
+    return FileResponse(f"frontend/dist/assets/{path}")
 
 @app.get("/api")
 def api_root():
@@ -147,7 +183,6 @@ async def get_games():
 
 @app.post("/game")
 async def create_game(game_obj: dict):
-    print(f"create_game: {game_obj}")
     if get_game_name(game_obj['id']):
         raise HTTPException(status_code=400, detail="Game already exists")
 
@@ -167,7 +202,6 @@ async def update_game(id: str, game_obj: dict):
 
 @app.get("/game/{id}")
 async def get_game(id: str):
-    print(f"get_game: {id}")
     save_path = os.path.join(GAME_DATA_DIR, id, 'game.yaml')
     with open(save_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -260,7 +294,7 @@ async def make_final_video(id: str):
         if make_video_task and (make_video_task.status == TaskStatus.RUNNING or make_video_task.status == TaskStatus.PENDING):
             raise HTTPException(status_code=409, detail=f"Another task is already running for game: {make_video_task}")
         
-        make_video_task = Task(id, "make_final_video", [("chunk", 50), ("frame_index", 50)])
+        make_video_task = Task(id, "make_final_video", [("chunk", 10), ("frame_index", 90)])
     
     thread = threading.Thread(target=run_make_final_video_task, args=(id,))
     thread.daemon = True
@@ -274,6 +308,8 @@ async def get_task_status(id: str, task_name: str):
         return make_video_task and id == make_video_task.id and make_video_task.to_dict() or {}
     elif task_name == "analyze_game":
         return analyze_game_task and id == analyze_game_task.id and analyze_game_task.to_dict() or {}
+    elif task_name == "preprocess_video":
+        return preprocess_video_task and id == preprocess_video_task.id and preprocess_video_task.to_dict() or {}
 
 @app.post("/game/{id}/task/{task_name}/cancel")
 async def cancel_task(id: str, task_name: str):
@@ -282,6 +318,8 @@ async def cancel_task(id: str, task_name: str):
         make_video_task.cancel()
     elif task_name == "analyze_game" and analyze_game_task and id == analyze_game_task.id and (analyze_game_task.status == TaskStatus.RUNNING or analyze_game_task.status == TaskStatus.PENDING):
         analyze_game_task.cancel()
+    elif task_name == "preprocess_video" and preprocess_video_task and id == preprocess_video_task.id and (preprocess_video_task.status == TaskStatus.RUNNING or preprocess_video_task.status == TaskStatus.PENDING):
+        preprocess_video_task.cancel()
     
     return {
         "id": id,
@@ -289,6 +327,38 @@ async def cancel_task(id: str, task_name: str):
         "status": TaskStatus.CANCELLED.value,
         "message": f"Task for game {id} has been cancelled"
     }
+
+@app.post("/videos/{id}/join")
+async def join_videos(id: str, videos: list[str]):
+    global preprocess_video_task
+    with task_lock:
+        if preprocess_video_task and (preprocess_video_task.status == TaskStatus.RUNNING or preprocess_video_task.status == TaskStatus.PENDING):
+            raise HTTPException(status_code=409, detail=f"Another task is already running for game: {preprocess_video_task}")
+        
+        preprocess_video_task = Task(id, "join_videos", [("chunk", 10), ("frame_index", 90)])
+
+    output_file = f'joined-{"-".join([os.path.basename(video).split(".")[0] for video in videos])}.mp4'
+    thread = threading.Thread(target=run_join_videos_task, args=(id, videos, output_file))
+    thread.daemon = True
+    thread.start()
+
+    return {"id": id, "task_id": id, "status": TaskStatus.PENDING.value, "message": "Join videos task started", 'output_file': output_file}
+
+@app.post("/video/{game_id}/{filename}/trim")
+async def trim_video(game_id: str, filename: str, start_time: float, end_time: float):
+    global preprocess_video_task
+    with task_lock:
+        if preprocess_video_task and (preprocess_video_task.status == TaskStatus.RUNNING or preprocess_video_task.status == TaskStatus.PENDING):
+            raise HTTPException(status_code=409, detail=f"Another task is already running for game: {preprocess_video_task}")
+
+        preprocess_video_task = Task(game_id, "trim_video", [("chunk", 10), ("frame_index", 90)])
+
+    output_file = f'trimmed-{os.path.basename(filename).split(".")[0]}.mp4'
+    thread = threading.Thread(target=run_trim_video_task, args=(game_id, filename, start_time, end_time, output_file))
+    thread.daemon = True
+    thread.start()
+
+    return {"id": game_id, "task_id": game_id, "status": TaskStatus.PENDING.value, "message": "Trim video task started", 'output_file': output_file}
 
 @app.post("/game/{id}/clean")
 async def clean_game(id: str):
@@ -313,7 +383,7 @@ async def upload_file(game_id: str, key: str, file: UploadFile = File(...)):
 async def get_videos(game_id: str):
     def path(game_id: str, filename: str):
         return os.path.join(GAME_DATA_DIR, game_id, filename)
-    return {"videos": [{'name': filename, 'size': os.path.getsize(path(game_id, filename)), 'last_modified': os.path.getmtime(path(game_id, filename)) * 1000, 'access_url': f'/video/{game_id}/{filename}'} for filename in os.listdir(os.path.join(GAME_DATA_DIR, game_id)) if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
+    return {"videos": [{'name': filename, 'size': os.path.getsize(path(game_id, filename)), 'last_modified': os.path.getmtime(path(game_id, filename)) * 1000, **get_video_props(path(game_id, filename))} for filename in os.listdir(os.path.join(GAME_DATA_DIR, game_id)) if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
 
 @app.get("/video/{game_id}/{filename}/preview")
 async def get_video_preview(game_id: str, filename: str, request: Request):
@@ -342,6 +412,18 @@ async def get_video(game_id: str, filename: str):
     if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
         raise HTTPException(status_code=400, detail="Invalid file type")
     return FileResponse(os.path.join(GAME_DATA_DIR, game_id, filename))
+
+@app.post("/video/{game_id}/{filename}/rename")
+async def rename_video(game_id: str, filename: str, new_filename: str):
+    if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
+    if not new_filename.split(".")[1].lower() == filename.split(".")[1].lower():
+        raise HTTPException(status_code=400, detail="File type mismatch")
+
+    filepath = os.path.join(GAME_DATA_DIR, game_id, filename)
+    os.rename(filepath, os.path.join(GAME_DATA_DIR, game_id, new_filename))
+    return {"filename": filename, "new_filename": new_filename, "renamed": True}
 
 @app.delete("/video/{game_id}/{filename}")
 async def delete_video(game_id: str, filename: str):

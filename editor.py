@@ -121,14 +121,12 @@ class Editor:
                 if time > first_replay_event_time - REPLAY_BUFFER and time < first_replay_event_time + REPLAY_BUFFER:
                     processing_replay_event = replay_events.pop(0)
                     print(f"processing replay event {processing_replay_event.type.name} {format_time(processing_replay_event.time)}")
-                    replay_frame = frame.copy()
-                    replay_frames.append(replay_frame)
-                    replay_frames.append(replay_frame)
+                    replay_frames.append(frame.copy())
+                    replay_frames.append(frame.copy())
             else:
                 if time > processing_replay_event.time - REPLAY_BUFFER and time < processing_replay_event.time + REPLAY_BUFFER:
-                    replay_frame = frame.copy()
-                    replay_frames.append(replay_frame)
-                    replay_frames.append(replay_frame)
+                    replay_frames.append(frame.copy())
+                    replay_frames.append(frame.copy())
                 else:
                     print(f"processed replay event {processing_replay_event.type.name} {format_time(processing_replay_event.time)}")
                     replay_time = processing_replay_event.replay_time

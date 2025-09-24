@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, Play, PenLine } from 'lucide-react';
-import { eventsApi, gameApi } from '../services/api';
+import { eventsApi, gameApi, videoApi } from '../services/api';
 import { Event, EVENT_TYPES, Game } from '../types';
 import { getErrorMessage, sortEventsByTime } from '../utils';
 import { Alert } from './Alert';
@@ -183,7 +183,7 @@ export const EventsPanel: React.FC<EventsPanelProps> = ({ gameId }) => {
             return null;
         }
         const videoName = game.videos[currentSegment - 1];
-        return videoName ? `/api/video/${gameId}/${encodeURIComponent(videoName)}` : null;
+        return videoName ? videoApi.getVideoUrl(gameId, videoName) : null;
     };
 
     const jumpToVideoTime = (timeString: string) => {

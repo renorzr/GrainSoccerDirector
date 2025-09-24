@@ -1,15 +1,69 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, RefreshCw, Trash2, Copy, Play, Eye } from 'lucide-react';
+import { Upload, RefreshCw, Trash2, Copy, Play, Eye, Link, Scissors, Edit3 } from 'lucide-react';
 import { videoApi } from '../services/api';
 import { Video } from '../types';
 import { getErrorMessage, formatFileSize, formatDate, copyToClipboard } from '../utils';
 import { Alert } from './Alert';
 import { VideoPreviewModal } from './VideoPreviewModal';
+import { JoinVideoModal } from './JoinVideoModal';
+import { TrimVideoModal } from './TrimVideoModal';
+import { RenameVideoModal } from './RenameVideoModal';
 import './VideosPanel.css';
 
 interface VideosPanelProps {
     gameId: string;
 }
+
+interface VideoPreviewThumbnailProps {
+    gameId: string;
+    video: Video;
+    onPreviewClick: () => void;
+}
+
+const VideoPreviewThumbnail: React.FC<VideoPreviewThumbnailProps> = ({
+    gameId,
+    video,
+    onPreviewClick
+}) => {
+    const [imageError, setImageError] = useState(false);
+    const [imageLoading, setImageLoading] = useState(true);
+
+    const handleImageError = () => {
+        setImageError(true);
+        setImageLoading(false);
+    };
+
+    const handleImageLoad = () => {
+        setImageLoading(false);
+    };
+
+    return (
+        <div
+            className="video-preview"
+            onClick={onPreviewClick}
+        >
+            {!imageError ? (
+                <>
+                    {imageLoading && (
+                        <div className="video-preview-loading">
+                            <div className="loading" style={{ width: '20px', height: '20px' }}></div>
+                        </div>
+                    )}
+                    <img
+                        src={videoApi.getVideoPreviewUrl(gameId, video.name, "160,90")}
+                        alt={`${video.name} preview`}
+                        className="video-preview-image"
+                        onError={handleImageError}
+                        onLoad={handleImageLoad}
+                        style={{ display: imageLoading ? 'none' : 'block' }}
+                    />
+                </>
+            ) : (
+                <Eye size={24} />
+            )}
+        </div>
+    );
+};
 
 export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
     const [videos, setVideos] = useState<Video[]>([]);
@@ -19,6 +73,14 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [deletingVideo, setDeletingVideo] = useState<string | null>(null);
     const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+    const [joinModalOpen, setJoinModalOpen] = useState(false);
+    const [selectedVideoForJoin, setSelectedVideoForJoin] = useState<Video | null>(null);
+    const [trimModalOpen, setTrimModalOpen] = useState(false);
+    const [selectedVideoForTrim, setSelectedVideoForTrim] = useState<Video | null>(null);
+    const [renameModalOpen, setRenameModalOpen] = useState(false);
+    const [selectedVideoForRename, setSelectedVideoForRename] = useState<Video | null>(null);
+
+
 
     useEffect(() => {
         loadVideos();
@@ -79,7 +141,8 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
     };
 
     const handleCopyUrl = async (video: Video) => {
-        const success = await copyToClipboard(video.access_url);
+        const videoUrl = videoApi.getVideoUrl(gameId, video.name);
+        const success = await copyToClipboard(videoUrl);
         if (success) {
             // Show success message
             setError(null);
@@ -89,11 +152,56 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
     };
 
     const handlePreviewVideo = (video: Video) => {
-        setPreviewVideoUrl('/api' + video.access_url);
+        setPreviewVideoUrl(videoApi.getVideoUrl(gameId, video.name));
     };
 
     const handleClosePreview = () => {
         setPreviewVideoUrl(null);
+    };
+
+    const handleJoinVideo = (video: Video) => {
+        setSelectedVideoForJoin(video);
+        setJoinModalOpen(true);
+    };
+
+    const handleCloseJoinModal = () => {
+        setJoinModalOpen(false);
+        setSelectedVideoForJoin(null);
+    };
+
+    const handleJoinComplete = () => {
+        // Refresh video list after join is complete
+        loadVideos();
+    };
+
+    const handleTrimVideo = (video: Video) => {
+        setSelectedVideoForTrim(video);
+        setTrimModalOpen(true);
+    };
+
+    const handleCloseTrimModal = () => {
+        setTrimModalOpen(false);
+        setSelectedVideoForTrim(null);
+    };
+
+    const handleTrimComplete = () => {
+        // Refresh video list after trim is complete
+        loadVideos();
+    };
+
+    const handleRenameVideo = (video: Video) => {
+        setSelectedVideoForRename(video);
+        setRenameModalOpen(true);
+    };
+
+    const handleCloseRenameModal = () => {
+        setRenameModalOpen(false);
+        setSelectedVideoForRename(null);
+    };
+
+    const handleRenameComplete = () => {
+        // Refresh video list after rename is complete
+        loadVideos();
     };
 
     if (loading) {
@@ -154,12 +262,11 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
                     <div className="video-list">
                         {videos.map(video => (
                             <div key={video.name} className="video-item">
-                                <div
-                                    className="video-preview"
-                                    onClick={() => handlePreviewVideo(video)}
-                                >
-                                    <Eye size={24} />
-                                </div>
+                                <VideoPreviewThumbnail
+                                    gameId={gameId}
+                                    video={video}
+                                    onPreviewClick={() => handlePreviewVideo(video)}
+                                />
 
                                 <div className="video-info">
                                     <div className="video-name">{video.name}</div>
@@ -185,6 +292,27 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
                                         <Play size={16} />
                                     </button>
                                     <button
+                                        className="btn btn-info btn-sm"
+                                        onClick={() => handleRenameVideo(video)}
+                                        title="重命名"
+                                    >
+                                        <Edit3 size={16} />
+                                    </button>
+                                    <button
+                                        className="btn btn-warning btn-sm"
+                                        onClick={() => handleTrimVideo(video)}
+                                        title="修剪视频"
+                                    >
+                                        <Scissors size={16} />
+                                    </button>
+                                    <button
+                                        className="btn btn-success btn-sm"
+                                        onClick={() => handleJoinVideo(video)}
+                                        title="拼接视频"
+                                    >
+                                        <Link size={16} />
+                                    </button>
+                                    <button
                                         className="btn btn-danger btn-sm"
                                         onClick={() => handleDeleteVideo(video.name)}
                                         disabled={deletingVideo === video.name}
@@ -207,6 +335,34 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
                 <VideoPreviewModal
                     videoUrl={previewVideoUrl}
                     onClose={handleClosePreview}
+                />
+            )}
+
+            {joinModalOpen && selectedVideoForJoin && (
+                <JoinVideoModal
+                    gameId={gameId}
+                    sourceVideo={selectedVideoForJoin}
+                    availableVideos={videos}
+                    onClose={handleCloseJoinModal}
+                    onJoinComplete={handleJoinComplete}
+                />
+            )}
+
+            {trimModalOpen && selectedVideoForTrim && (
+                <TrimVideoModal
+                    gameId={gameId}
+                    sourceVideo={selectedVideoForTrim}
+                    onClose={handleCloseTrimModal}
+                    onTrimComplete={handleTrimComplete}
+                />
+            )}
+
+            {renameModalOpen && selectedVideoForRename && (
+                <RenameVideoModal
+                    gameId={gameId}
+                    sourceVideo={selectedVideoForRename}
+                    onClose={handleCloseRenameModal}
+                    onRenameComplete={handleRenameComplete}
                 />
             )}
         </div>

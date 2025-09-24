@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  soccer-director:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # 持久化游戏数据
+      - ./games:/app/games
+      # 可选：挂载资源文件
+      - ./resources:/app/resources:ro
+      - ./fonts:/app/fonts:ro
+    environment:
+      - GAME_DATA_DIR=/app/games
+      - VIDEO_EXTENSIONS=mp4,mov,avi,mkv
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      # 从 .env 文件加载 API 密钥（如果存在）
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - FISH_AUDIO_API_KEY=${FISH_AUDIO_API_KEY:-}
+      - FISH_AUDIO_MODEL=${FISH_AUDIO_MODEL:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # 如果需要更多资源，可以调整这些限制
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G

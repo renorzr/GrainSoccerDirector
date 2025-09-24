@@ -1,4 +1,6 @@
+import cv2
 import os
+import subprocess
 from proglog import ProgressBarLogger
 from event import EventType
 from moviepy import VideoFileClip, concatenate_videoclips
@@ -45,3 +47,43 @@ def make_final_video(game, task=None):
 
     game_clip = concatenate_videoclips(clips)
     game_clip.write_videofile(os.path.join(game.directory, f'final-{game.game_id}.mp4'), threads=32, fps=24, logger=task and MyBarLogger(task) or None)
+
+#def join_videos(game, videos, output_file, task=None):
+#    print(f'Joining videos: {videos} -> {output_file}')
+#    with open(os.path.join(game.directory, 'list.txt'), 'w') as f:
+#        for video in videos:
+#            f.write(f'file {video}\n')
+#    subprocess.run(['ffmpeg', '-f', 'concat', '-safe', '0', '-i', list_file, '-c', 'copy', output_file], cwd=game.directory)
+#
+#    return output_file
+
+#def trim_video(game, video, start_time, end_time, output_file, task=None):
+#    subprocess.run(['ffmpeg', '-i', os.path.join(game.directory, video), '-ss', format_ffmpeg_time(start_time), '-to', format_ffmpeg_time(end_time), os.path.join(game.directory, output_file)])
+#
+#    return output_file
+
+def format_ffmpeg_time(time: float):
+    return f'{int(time // 3600)}:{int((time % 3600) // 60)}:{int(time % 60)}'
+
+def join_videos(game, videos, output_file, task=None):
+    clips = [VideoFileClip(os.path.join(game.directory, video)) for video in videos]
+    fps = clips[0].fps
+    game_clip = concatenate_videoclips(clips, method='chain')
+    game_clip.write_videofile(os.path.join(game.directory, output_file), threads=32, fps=fps, preset='ultrafast', logger=task and MyBarLogger(task) or None)
+
+    return output_file
+
+def trim_video(game, video, start_time, end_time=None, task=None):
+    video_clip = VideoFileClip(os.path.join(game.directory, video))
+    video_clip = video_clip.subclip(start_time, end_time)
+    video_clip.write_videofile(os.path.join(game.directory, video), threads=32, fps=video_clip.fps, preset='ultrafast', logger=task and MyBarLogger(task) or None)
+
+    return video
+
+def get_video_props(file):
+    cap = cv2.VideoCapture(file)
+    return {
+        'fps': cap.get(cv2.CAP_PROP_FPS),
+        'frame_count': cap.get(cv2.CAP_PROP_FRAME_COUNT),
+        'duration': cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
+    }

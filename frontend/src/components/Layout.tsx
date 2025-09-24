@@ -8,7 +8,7 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
-    const isGameDetail = location.pathname.startsWith('/game/');
+    const isGameDetail = location.pathname.startsWith('/g/');
 
     return (
         <div className="app">

@@ -12,7 +12,7 @@ function App() {
                 <Layout>
                     <Routes>
                         <Route path="/" element={<GameList />} />
-                        <Route path="/game/:gameId" element={<GameDetail />} />
+                        <Route path="/g/:gameId" element={<GameDetail />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                 </Layout>

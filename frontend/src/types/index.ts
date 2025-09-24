@@ -58,7 +58,9 @@ export interface Video {
     name: string;
     size: number;
     last_modified: string;
-    access_url: string;
+    fps: number;
+    frame_count: number;
+    duration: number;
 }
 
 export interface VideoListResponse {

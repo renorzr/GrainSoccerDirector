@@ -16,12 +16,12 @@ class Game:
         self.comment_requirement = obj.get('comment_requirement')
         self.teams = [Team(obj['name'], obj['color'], obj.get('code')) for obj in obj['teams']]
         self.videos = obj.get('videos', [])
-        self.logo_video = obj.get('logo_video', os.path.join(directory, 'logo.mp4'))
-        self.brand_video = obj.get('brand_video', os.path.join(directory, 'brand.mp4'))
-        self.bgm = obj.get('bgm', os.path.join(directory, 'bgm.mp3'))
+        self.logo_video = obj.get('logo_video')
+        self.brand_video = obj.get('brand_video')
+        self.bgm = obj.get('bgm')
         self.prev_time = parse_time(obj.get('prev_time', 0))
         self.narrator = obj.get('narrator', '云说')
         self.directory = obj['directory']
 
-        with open(obj.get('scoreboard', os.path.join(directory, 'scoreboard.yaml')), 'r', encoding='utf-8') as f:
+        with open(obj.get('scoreboard'), 'r', encoding='utf-8') as f:
             self.scoreboard_props = yaml.safe_load(f)

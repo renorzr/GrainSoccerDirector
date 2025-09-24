@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Edit, Play, Save, X, Square, RefreshCw } from 'lucide-react';
-import { commentsApi, gameApi, taskApi } from '../services/api';
+import { commentsApi, gameApi, taskApi, videoApi } from '../services/api';
 import { Comment, Game, Task } from '../types';
 import { formatTime, getErrorMessage } from '../utils';
 import { Alert } from './Alert';
@@ -146,7 +146,7 @@ export const CommentsPanel: React.FC<CommentsPanelProps> = ({ gameId }) => {
     };
 
     const handlePlayComment = async (index: number) => {
-        const audio = new Audio(`/api/game/${gameId}/comment/${currentSegment}/${index}/voice`);
+        const audio = new Audio(commentsApi.getVoiceUrl(gameId, currentSegment, index));
         audio.play();
     };
 
