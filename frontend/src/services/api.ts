@@ -12,7 +12,7 @@ import {
     Comment
 } from '../types';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = '';
 
 const api = axios.create({
     baseURL: API_BASE,
