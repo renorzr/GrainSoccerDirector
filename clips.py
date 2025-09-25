@@ -82,8 +82,10 @@ def trim_video(game, video, start_time, end_time=None, task=None):
 
 def get_video_props(file):
     cap = cv2.VideoCapture(file)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
     return {
-        'fps': cap.get(cv2.CAP_PROP_FPS),
-        'frame_count': cap.get(cv2.CAP_PROP_FRAME_COUNT),
-        'duration': cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
+        'fps': fps,
+        'frame_count': frame_count,
+        'duration': fps > 0 and frame_count / fps or 0,
     }
