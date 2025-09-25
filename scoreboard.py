@@ -45,58 +45,28 @@ class Scoreboard:
         # 绘制时间
         if 'time' in self.textprops:
             time_prop = self.textprops['time']
-            font_path = time_prop.font or f"{DEFAULT_FONT}.otf"
-            try:
-                font = ImageFont.truetype(font_path, time_prop.height)
-            except Exception:
-                font = ImageFont.load_default()
             draw_text(draw, time_str, time_prop)
 
         # 绘制比分0
         if 'score0' in self.textprops:
             score0_prop = self.textprops['score0']
-            font_path = score0_prop.font or f"{DEFAULT_FONT}.otf"
-            try:
-                font = ImageFont.truetype(font_path, score0_prop.height)
-            except Exception:
-                font = ImageFont.load_default()
             draw_text(draw, str(score0), score0_prop)
 
         # 绘制比分1
         if 'score1' in self.textprops:
             score1_prop = self.textprops['score1']
-            font_path = score1_prop.font or f"{DEFAULT_FONT}.otf"
-            try:
-                font = ImageFont.truetype(font_path, score1_prop.height)
-            except Exception:
-                font = ImageFont.load_default()
             draw_text(draw, str(score1), score1_prop)
 
         if 'team0' in self.textprops:
             team0_prop = self.textprops['team0']
-            font_path = team0_prop.font or f"{DEFAULT_FONT}.otf"
-            try:
-                font = ImageFont.truetype(font_path, team0_prop.height)
-            except Exception:
-                font = ImageFont.load_default()
             draw_text(draw, self.texts['team0'], team0_prop)
 
         if 'team1' in self.textprops:
             team1_prop = self.textprops['team1']
-            font_path = team1_prop.font or f"{DEFAULT_FONT}.otf"
-            try:
-                font = ImageFont.truetype(font_path, team1_prop.height)
-            except Exception:
-                font = ImageFont.load_default()
             draw_text(draw, self.texts['team1'], team1_prop)
 
         if 'segment' in self.textprops:
             segment_prop = self.textprops['segment']
-            font_path = segment_prop.font or f"{DEFAULT_FONT}.otf"
-            try:
-                font = ImageFont.truetype(font_path, segment_prop.height)
-            except Exception:
-                font = ImageFont.load_default()
             draw_text(draw, self.texts['segment'], segment_prop)
 
         # 转回OpenCV格式以便cv2使用
@@ -165,7 +135,7 @@ def draw_text(draw, text, textprop):
             pass
 
     x, y = int(textprop.left), int(textprop.top)
-    font = ImageFont.truetype("C:\\Users\\frien\\workplace\\soccer-director\\fonts\\SourceHanSansSC-Regular.otf", textprop.height)
+    font = ImageFont.truetype(os.path.join(os.path.dirname(__file__), "fonts", "SourceHanSansSC-Regular.otf"), textprop.height)
     draw.text((x, y),  str(text), font=font, fill = (color[0], color[1], color[2], 255))
 
 
