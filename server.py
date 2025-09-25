@@ -24,7 +24,7 @@ from utils import video_preview, events_path
 from clips import make_final_video as _make_final_video, join_videos as _join_videos, trim_video as _trim_video, get_video_props
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
-VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv").split(",")
+VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv,webm").split(",")
 
 
 app = FastAPI(

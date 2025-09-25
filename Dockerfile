@@ -23,6 +23,8 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 安装系统依赖
+COPY debian.sources /etc/apt/sources.list.d/debian.sources
+
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libgl1-mesa-dri \
@@ -56,7 +58,6 @@ RUN mkdir -p /app/games
 
 # 设置环境变量
 ENV GAME_DATA_DIR=/app/games
-ENV VIDEO_EXTENSIONS=mp4,mov,avi,mkv
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
