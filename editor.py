@@ -82,7 +82,7 @@ class Editor:
 
     def create_output_video(self):
         temp_video_path = os.path.join(self.game.directory, TEMP_VIDEO_NAME)
-        print(f"creating output video {self.game.videos[self.segment - 1]}")
+        print(f"creating output video {temp_video_path} from {self.game_video(self.segment)}")
 
         replay_events = self.calculate_replay_times()
         print(f"found {len(replay_events)} replay events")
@@ -113,8 +113,6 @@ class Editor:
                 break
 
             time = frame_count / fps
-            if frame_count % 10 == 0:
-                print(f"frame {frame_count} / {cap.get(cv2.CAP_PROP_FRAME_COUNT)}", end="\r")
 
             if processing_replay_event is None:
                 first_replay_event_time = len(replay_events) > 0 and replay_events[0].time or -100
@@ -142,6 +140,8 @@ class Editor:
 
             self.draw_scoreboard(time, frame)
             self.draw_logo(time, frame)
+            if frame_count % 10 == 0:
+                print(f"frame {frame_count} / {cap.get(cv2.CAP_PROP_FRAME_COUNT)}", end="\r")
             out.write(frame)
 
         out.release()  # release the cv2's VideoWriter
