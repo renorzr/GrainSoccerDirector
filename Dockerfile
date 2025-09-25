@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # 安装 Python 依赖
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple/
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制后端源代码

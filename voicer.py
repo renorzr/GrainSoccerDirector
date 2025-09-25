@@ -3,9 +3,9 @@ import time
 import os
 import hashlib
 from fish_audio_sdk import Session, TTSRequest, Prosody
-
 VOICE_DIR = 'voices'
-session = Session(os.getenv('FISH_AUDIO_API_KEY'))
+base_url = os.getenv('FISH_AUDIO_BASE_URL', 'https://api.fish.audio')
+session = Session(os.getenv('FISH_AUDIO_API_KEY'), base_url=base_url)
 
 class Voicer:
     def __init__(self, directory, comments):
@@ -33,6 +33,7 @@ class Voicer:
 
         # generate and save voice
         print(f"generating voice for comment {text} with path {voice_path}")
+        os.makedirs(os.path.dirname(voice_path), exist_ok=True)
         with open(voice_path, 'wb') as f:
             for chunk in session.tts(TTSRequest(
                 reference_id=os.getenv('FISH_AUDIO_MODEL'),
