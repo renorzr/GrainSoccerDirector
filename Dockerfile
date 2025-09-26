@@ -27,6 +27,8 @@ COPY debian.sources /etc/apt/sources.list.d/debian.sources
 
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    x264 \
+    libx264-dev \
     libgl1-mesa-dri \
     libglib2.0-0 \
     libsm6 \
