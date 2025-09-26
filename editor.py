@@ -18,7 +18,7 @@ HIGHLIGHT_EXTEND = 3
 INTERRUPT_BUFFER = 0.5
 LOGO_STAY = 0.5
 LOGO_FLY = 0.8
-TEMP_VIDEO_NAME = 'temp.webm'
+TEMP_VIDEO_NAME = 'temp.mp4'
 TEMP_AUDIO_NAME = 'temp.aac'
 
 # 剪辑器

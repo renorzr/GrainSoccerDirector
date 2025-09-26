@@ -1,5 +1,5 @@
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class TaskStatus(Enum):
@@ -14,7 +14,7 @@ class Task:
         self.id = id
         self.name = name
         self.status = TaskStatus.PENDING
-        self.created_at = datetime.now().isoformat()
+        self.created_at = datetime.now(timezone.utc).strftime('%FT%XZ')
         self.started_at = None
         self.completed_at = None
         self.error = None
@@ -28,14 +28,14 @@ class Task:
         self.logs.append(log)
 
     def start(self):
-        self.started_at = datetime.now().isoformat()
+        self.started_at = datetime.now(timezone.utc).strftime('%FT%XZ')
         self.status = TaskStatus.RUNNING
         self.progress = 0
         self.stage = "starting"
         self.logs = []
 
     def complete(self):
-        self.completed_at = datetime.now().isoformat()
+        self.completed_at = datetime.now(timezone.utc).strftime('%FT%XZ')
         self.status = TaskStatus.COMPLETED
         self.progress = 100
         self.stage = None

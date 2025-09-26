@@ -247,7 +247,7 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
                     <VideoPreviewCard
                         key={index}
                         gameId={gameId}
-                        name={`output-${index + 1}.webm`}
+                        name={`output-${index + 1}.mp4`}
                         title={`第${index + 1}节`}
                         onPreview={() => handleVideoPreview(`output-${index + 1}.mp4`)}
                         onDelete={handleDeleteVideo}
