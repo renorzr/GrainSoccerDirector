@@ -94,6 +94,8 @@ class Editor:
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.end_time = self.end_time or cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps
         out = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'h264'), fps, (width, height))
+        if not out.isOpened():
+            raise RuntimeError("Failed to open video writer")
         replay_frames = []
         replay_time = None
         processing_replay_event = None
