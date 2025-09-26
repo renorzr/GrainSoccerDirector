@@ -9,6 +9,7 @@ import { JoinVideoModal } from './JoinVideoModal';
 import { TrimVideoModal } from './TrimVideoModal';
 import { RenameVideoModal } from './RenameVideoModal';
 import './VideosPanel.css';
+import { formatTime } from '../services/utils';
 
 interface VideosPanelProps {
     gameId: string;
@@ -273,6 +274,7 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
                                     <div className="video-meta">
                                         <span>📏 {formatFileSize(video.size)}</span>
                                         <span>📅 {formatDate(video.last_modified)}</span>
+                                        <span>🎥 {video.codec} / {video.fps} fps / {formatTime(video.duration)}</span>
                                     </div>
                                 </div>
 

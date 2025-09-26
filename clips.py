@@ -84,8 +84,13 @@ def get_video_props(file):
     cap = cv2.VideoCapture(file)
     fps = cap.get(cv2.CAP_PROP_FPS)
     frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    codec = decode_fourcc(cap.get(cv2.CAP_PROP_FOURCC))
     return {
         'fps': fps,
         'frame_count': frame_count,
         'duration': fps > 0 and frame_count / fps or 0,
+        'codec': codec,
     }
+
+def decode_fourcc(cc):
+    return "".join([chr((int(cc) >> 8 * i) & 0xFF) for i in range(4)])

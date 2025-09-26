@@ -5,6 +5,7 @@ import { Video, Task } from '../types';
 import { getErrorMessage } from '../utils';
 import { Alert } from './Alert';
 import './TrimVideoModal.css';
+import { formatTime } from '../services/utils';
 
 interface TrimVideoModalProps {
     gameId: string;
@@ -128,12 +129,6 @@ export const TrimVideoModal: React.FC<TrimVideoModalProps> = ({
     const getTaskProgress = () => {
         if (!taskStatus || taskStatus.status !== 'running') return 0;
         return taskStatus.progress || 0;
-    };
-
-    const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = Math.floor(seconds % 60);
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     };
 
     const handleStartTimeChange = (value: string) => {

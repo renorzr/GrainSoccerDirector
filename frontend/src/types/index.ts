@@ -61,6 +61,7 @@ export interface Video {
     fps: number;
     frame_count: number;
     duration: number;
+    codec: string;
 }
 
 export interface VideoListResponse {
