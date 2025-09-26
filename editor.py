@@ -93,7 +93,7 @@ class Editor:
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.end_time = self.end_time or cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps
-        out = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'vp80'), fps, (width, height))
+        out = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
         replay_frames = []
         replay_time = None
         processing_replay_event = None
