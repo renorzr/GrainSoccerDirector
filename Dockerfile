@@ -17,7 +17,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # 第二阶段：Python 后端
-FROM python:3.11-slim
+FROM continuumio/miniconda3:25.3.1-1
 
 # 设置工作目录
 WORKDIR /app
@@ -40,12 +40,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制 Python 依赖文件
-COPY requirements.txt .
+# 复制 conda 环境文件
+COPY environment.yml .
 
-# 安装 Python 依赖
-RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple/
-RUN pip install --no-cache-dir -r requirements.txt
+# 创建并激活 conda 环境
+RUN conda env create -f environment.yml
+RUN conda clean -afy
 
 # 复制后端源代码
 COPY *.py ./
@@ -70,5 +70,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/api || exit 1
 
-# 启动命令
-CMD ["python", "server.py"]
+# 激活环境并启动命令
+SHELL ["conda", "run", "-n", "grainsoccer", "/bin/bash", "-c"]
+CMD ["conda", "run", "-n", "grainsoccer", "python", "server.py"]

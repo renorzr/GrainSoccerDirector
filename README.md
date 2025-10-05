@@ -14,13 +14,31 @@
 
 ## 安装说明
 
-1. 确保已安装 Python 3.8 或更高版本
+### 使用 Miniconda（推荐）
+
+1. 安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
 2. 克隆项目到本地：
    ```bash
    git clone https://github.com/renorzr/soccer-director.git
    cd soccer-director
    ```
-3. 创建并激活虚拟环境（推荐）：
+3. 运行环境设置脚本：
+   ```bash
+   # Linux/Mac
+   ./setup_dev_env.sh
+   
+   # Windows
+   setup_dev_env.bat
+   ```
+4. 激活环境：
+   ```bash
+   conda activate grainsoccer
+   ```
+
+### 使用传统 pip 方式
+
+1. 确保已安装 Python 3.8 或更高版本
+2. 创建并激活虚拟环境：
    ```bash
    python -m venv venv
    # Windows
@@ -28,7 +46,7 @@
    # Linux/Mac
    source venv/bin/activate
    ```
-4. 安装依赖：
+3. 安装依赖：
    ```bash
    pip install -r requirements.txt
    ```
@@ -143,12 +161,39 @@ scoreboard: "scoreboard.yaml" # 记分牌配置文件
 - `scoreboard.py`: 记分牌模块
 - `.env`: 环境变量配置文件
 
+## 环境管理
+
+### Conda 环境管理
+
+```bash
+# 激活环境
+conda activate grainsoccer
+
+# 更新环境（当 environment.yml 有变化时）
+conda env update -f environment.yml
+
+# 导出当前环境
+conda env export > environment.yml
+
+# 删除环境
+conda env remove -n grainsoccer
+
+# 查看所有环境
+conda env list
+```
+
+### 依赖管理
+
+- 主要依赖通过 `environment.yml` 管理
+- 保留 `requirements.txt` 用于兼容性
+- 优先使用 conda 安装包，无法安装的包通过 pip 安装
+
 ## 注意事项
 
 1. 确保视频文件格式为 MP4
 2. 配置文件必须使用 YAML 格式
 3. 所有相关文件（视频、音频、图片）应放在同一目录下
-4. 建议使用虚拟环境运行程序
+4. 建议使用 conda 环境运行程序
 5. 请妥善保管 API 密钥，不要将其提交到版本控制系统
 
 ## 常见问题
