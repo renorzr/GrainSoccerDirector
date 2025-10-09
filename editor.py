@@ -1,6 +1,5 @@
 import logging
 import subprocess
-from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip
 import os
 from voicer import Voicer
 from utils import format_time, events_path, load_game_data
@@ -149,41 +148,115 @@ class Editor:
 
     def create_output_audio(self):
         temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
-        print(f"creating output audio {TEMP_AUDIO_NAME}")
+        print(f"creating output audio {TEMP_AUDIO_NAME} using FFmpeg streaming")
+        
+        # 1. 首先生成所有语音文件
         self.voicer.make_voice(self.task)
-        audio_clips = [VideoFileClip(self.game_video(self.segment)).audio]
+        
+        # 2. 处理音频重叠和中断逻辑
+        processed_comments = self._process_audio_overlaps()
+        
+        # 3. 使用FFmpeg进行流式音频混合
+        self._create_audio_with_ffmpeg(processed_comments, temp_audio_path)
+    
+    def _process_audio_overlaps(self):
+        """处理音频重叠和中断逻辑，返回处理后的评论列表"""
+        processed_comments = []
         last_comment = None
         comment_count = 0
+        
         for comment in self.comments:
             comment_count += 1
             self.update_progress("output_audio", comment_count, len(self.comments))
+            
             if self.is_cancelled():
-                print("Video processing was cancelled")
-                raise InterruptedError("Video processing was cancelled")
-
+                print("Audio processing was cancelled")
+                raise InterruptedError("Audio processing was cancelled")
+                
             if not comment.text:
                 continue
-            voice_path = self.voicer.get_voice(comment.text)["path"]
-            logging.info(f"voice path: {voice_path}")
-            voice_clip = AudioFileClip(voice_path).with_volume_scaled(2)
-            last_comment_end = last_comment.time + audio_clips[-1].duration if last_comment else 0
-            if comment.time < last_comment_end:
-                logging.info("overlapping comments, skipping lower level")
-                if comment.event_level < last_comment.event_level:
-                    logging.info(f"skipping comment {comment.text}")
-                    continue
-                if last_comment.time < comment.time - INTERRUPT_BUFFER:
-                    logging.info(f"interrupt last comment {last_comment.text}")
-                    audio_clips[-1] = audio_clips[-1].subclipped(0, comment.time - last_comment.time - INTERRUPT_BUFFER)
-                else:
-                    logging.info(f"skipping last comment {last_comment.text}")
-                    audio_clips.pop()
-                    last_comment = None
-
-            logging.info(f"Adding voice for comment {comment.text} at {comment.time}")
-            audio_clips.append(voice_clip.with_start(comment.time))
-            last_comment = comment
-        CompositeAudioClip(audio_clips).write_audiofile(temp_audio_path, codec="aac")
+                
+            # 检查是否与上一个评论重叠
+            if last_comment is not None:
+                last_comment_end = last_comment.time + last_comment.duration
+                if comment.time < last_comment_end:
+                    logging.info("overlapping comments, handling overlap")
+                    if comment.event_level < last_comment.event_level:
+                        logging.info(f"skipping comment {comment.text} (lower level)")
+                        continue
+                    
+                    # 处理中断逻辑
+                    if last_comment.time < comment.time - INTERRUPT_BUFFER:
+                        logging.info(f"interrupting last comment {last_comment.text}")
+                        # 截断上一个评论的持续时间
+                        last_comment.duration = comment.time - last_comment.time - INTERRUPT_BUFFER
+                    else:
+                        logging.info(f"removing last comment {last_comment.text}")
+                        # 移除上一个评论
+                        processed_comments.pop()
+                        last_comment = None
+            
+            # 获取语音文件信息
+            voice_info = self.voicer.get_voice(comment.text)
+            if voice_info["duration"] > 0:
+                # 动态添加duration属性到comment对象
+                comment.duration = voice_info["duration"]
+                processed_comments.append(comment)
+                last_comment = comment
+                logging.info(f"Adding voice for comment {comment.text} at {comment.time}")
+        
+        return processed_comments
+    
+    def _create_audio_with_ffmpeg(self, comments, output_path):
+        """使用FFmpeg进行流式音频混合"""
+        if not comments:
+            # 如果没有评论，直接提取原始视频音频
+            cmd = [
+                'ffmpeg', '-y',
+                '-i', self.game_video(self.segment),
+                '-c:a', 'aac', '-b:a', '128k',
+                output_path
+            ]
+        else:
+            # 构建FFmpeg命令
+            cmd = ['ffmpeg', '-y']
+            
+            # 添加输入文件
+            cmd.extend(['-i', self.game_video(self.segment)])  # 原始视频音频
+            
+            # 添加所有语音文件
+            for comment in comments:
+                voice_path = self.voicer.get_voice(comment.text)["path"]
+                cmd.extend(['-i', voice_path])
+            
+            # 构建音频滤镜
+            filter_parts = []
+            mix_inputs = "[0:a]"  # 原始音频
+            
+            for i, comment in enumerate(comments):
+                # 为每个语音文件创建延迟和音量调整滤镜
+                delay_ms = int(comment.time * 1000)
+                filter_parts.append(f"[{i+1}]adelay={delay_ms}:all=1,volume=2.0[a{i+1}]")
+                mix_inputs += f"[a{i+1}]"
+            
+            # 合并所有音频流
+            filter_complex = ";".join(filter_parts) + f";{mix_inputs}amix=inputs={len(comments)+1}:duration=longest[out]"
+            
+            cmd.extend([
+                '-filter_complex', filter_complex,
+                '-map', '[out]',
+                '-c:a', 'aac', '-b:a', '128k',
+                output_path
+            ])
+        
+        # 执行FFmpeg命令
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            logging.info(f"FFmpeg audio processing completed successfully")
+        except subprocess.CalledProcessError as e:
+            logging.error(f"FFmpeg audio processing failed: {e}")
+            logging.error(f"FFmpeg stderr: {e.stderr}")
+            raise RuntimeError(f"Audio processing failed: {e.stderr}")
 
     def add_audio(self):
         self.update_progress("add_audio", 0, 1)
