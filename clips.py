@@ -1,84 +1,98 @@
 import cv2
 import os
 import subprocess
-from proglog import ProgressBarLogger
 from event import EventType
-from moviepy import VideoFileClip, concatenate_videoclips
 from utils import format_time
 
 
-class MyBarLogger(ProgressBarLogger):
-
-    def __init__(self, task):
-        super().__init__()
-        self.task = task
-        self.chunk_total = None
-        self.frame_total = None
-    
-    def callback(self, **changes):
-        for (parameter, value) in changes.items():
-            self.last_message = parameter
-            print(f"MyBarLogger: {parameter} {value}")
-    
-    def bars_callback(self, bar, attr, value,old_value=None):
-        if bar != "chunk" and attr != "index":
-            print(f"MyBarLogger: {bar} {attr} {value} {old_value}")
-
-        if bar == "chunk" and attr == "total":
-            self.chunk_total = value
-        if bar == "frame_index" and attr == "total":
-            self.frame_total = value
-
-        total = self.chunk_total if bar == "chunk" else self.frame_total
-        if total:
-            self.task.update_progress(bar, value, total)
-        
 
 def make_final_video(game, task=None):
-    brand_clip = VideoFileClip(game.brand_video if os.path.isabs(game.brand_video) else os.path.join(game.directory, game.brand_video))
-    clips = [brand_clip]
+    # Create a list of video files to concatenate
+    video_files = []
+    
+    # Add brand video
+    brand_video_path = game.brand_video if os.path.isabs(game.brand_video) else os.path.join(game.directory, game.brand_video)
+    video_files.append(brand_video_path)
+    
+    # Add segment videos with brand video between each
     for segment in range(1, len(game.videos) + 1):
         segment_path = os.path.join(game.directory, f'output-{segment}.mp4')
         if not os.path.exists(segment_path):
             raise FileNotFoundError(f'output-{segment}.mp4 not found')
-        segment_clip = VideoFileClip(segment_path)
-        clips.append(segment_clip)
-        clips.append(brand_clip)
+        video_files.append(segment_path)
+        video_files.append(brand_video_path)
+    
+    # Create concat file for ffmpeg
+    concat_file = os.path.join(game.directory, 'concat_list.txt')
+    with open(concat_file, 'w') as f:
+        for video_file in video_files:
+            f.write(f"file '{video_file}'\n")
+    
+    # Use ffmpeg to concatenate videos
+    output_file = os.path.join(game.directory, f'final-{game.game_id}.mp4')
+    cmd = [
+        'ffmpeg', '-y',  # -y to overwrite output file
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concat_file,
+        '-c', 'copy',  # Copy streams without re-encoding for speed
+        output_file
+    ]
+    
+    if task:
+        print(f"Creating final video: {output_file}")
+    
+    subprocess.run(cmd, check=True)
+    
+    # Clean up concat file
+    os.remove(concat_file)
 
-    game_clip = concatenate_videoclips(clips)
-    game_clip.write_videofile(os.path.join(game.directory, f'final-{game.game_id}.mp4'), threads=32, fps=24, logger=task and MyBarLogger(task) or None)
+def join_videos(game, videos, output_file, task=None):
+    print(f'Joining videos: {videos} -> {output_file}')
+    list_file = os.path.join(game.directory, 'list.txt')
+    with open(list_file, 'w') as f:
+        for video in videos:
+            f.write(f"file '{video}'\n")
+    
+    cmd = [
+        'ffmpeg', '-y',  # -y to overwrite output file
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', list_file,
+        '-c', 'copy',
+        output_file
+    ]
+    
+    subprocess.run(cmd, cwd=game.directory, check=True)
+    
+    # Clean up list file
+    os.remove(list_file)
 
-#def join_videos(game, videos, output_file, task=None):
-#    print(f'Joining videos: {videos} -> {output_file}')
-#    with open(os.path.join(game.directory, 'list.txt'), 'w') as f:
-#        for video in videos:
-#            f.write(f'file {video}\n')
-#    subprocess.run(['ffmpeg', '-f', 'concat', '-safe', '0', '-i', list_file, '-c', 'copy', output_file], cwd=game.directory)
-#
-#    return output_file
+    return output_file
 
-#def trim_video(game, video, start_time, end_time, output_file, task=None):
-#    subprocess.run(['ffmpeg', '-i', os.path.join(game.directory, video), '-ss', format_ffmpeg_time(start_time), '-to', format_ffmpeg_time(end_time), os.path.join(game.directory, output_file)])
-#
-#    return output_file
+def trim_video(game, video, start_time, end_time, output_file, task=None):
+    input_path = os.path.join(game.directory, video)
+    output_path = os.path.join(game.directory, output_file)
+    
+    cmd = [
+        'ffmpeg', '-y',  # -y to overwrite output file
+        '-i', input_path,
+        '-ss', format_ffmpeg_time(start_time),
+        '-to', format_ffmpeg_time(end_time),
+        '-c', 'copy',  # Copy streams without re-encoding for speed
+        output_path
+    ]
+    
+    if task:
+        print(f"Trimming video: {video} from {start_time}s to {end_time}s")
+    
+    subprocess.run(cmd, check=True)
+
+    return output_file
 
 def format_ffmpeg_time(time: float):
     return f'{int(time // 3600)}:{int((time % 3600) // 60)}:{int(time % 60)}'
 
-def join_videos(game, videos, output_file, task=None):
-    clips = [VideoFileClip(os.path.join(game.directory, video)) for video in videos]
-    fps = clips[0].fps
-    game_clip = concatenate_videoclips(clips, method='chain')
-    game_clip.write_videofile(os.path.join(game.directory, output_file), threads=32, fps=fps, preset='ultrafast', logger=task and MyBarLogger(task) or None)
-
-    return output_file
-
-def trim_video(game, video, start_time, end_time=None, task=None):
-    video_clip = VideoFileClip(os.path.join(game.directory, video))
-    video_clip = video_clip.subclip(start_time, end_time)
-    video_clip.write_videofile(os.path.join(game.directory, video), threads=32, fps=video_clip.fps, preset='ultrafast', logger=task and MyBarLogger(task) or None)
-
-    return video
 
 def get_video_props(file):
     cap = cv2.VideoCapture(file)

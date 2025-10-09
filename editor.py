@@ -1,6 +1,6 @@
 import logging
 import subprocess
-from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, CompositeAudioClip
+from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip
 import os
 from voicer import Voicer
 from utils import format_time, events_path, load_game_data
