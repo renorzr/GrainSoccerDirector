@@ -183,7 +183,7 @@ export const videoApi = {
 
     // Get video URL
     getVideoUrl: (gameId: string, videoName: string): string => {
-        return `${API_BASE}/video/${gameId}/${encodeURIComponent(videoName)}`;
+        return `${API_BASE}/video/${gameId}/${encodeURIComponent(videoName)}?optimize=true`;
     },
 
     getVideoPreviewUrl: (gameId: string, videoName: string, size: string = "200,150"): string => {
