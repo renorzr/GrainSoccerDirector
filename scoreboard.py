@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import os
 from PIL import Image, ImageFont, ImageDraw
-from moviepy import ImageClip, TextClip, CompositeVideoClip
 from utils import format_time
 
 DEFAULT_FONT = 'SourceHanSansSC-Medium'

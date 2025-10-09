@@ -1,13 +1,11 @@
 import logging
 import subprocess
-from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, CompositeAudioClip, ImageClip, concatenate_videoclips, TextClip
-from moviepy.video.fx import MultiplySpeed, Resize, CrossFadeIn, CrossFadeOut
-import numpy as np
+from moviepy import VideoFileClip, AudioFileClip, CompositeVideoClip, CompositeAudioClip
 import os
 from voicer import Voicer
 from utils import format_time, events_path, load_game_data
 from event import Event
-from event import Tag, EventType
+from event import Tag
 import cv2
 from scoreboard import Scoreboard
 
