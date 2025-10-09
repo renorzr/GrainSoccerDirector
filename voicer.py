@@ -2,10 +2,11 @@ import subprocess
 import time
 import os
 import hashlib
-from fish_audio_sdk import Session, TTSRequest, Prosody
+import requests
+import json
 VOICE_DIR = 'voices'
 base_url = os.getenv('FISH_AUDIO_BASE_URL', 'https://api.fish.audio')
-session = Session(os.getenv('FISH_AUDIO_API_KEY'), base_url=base_url)
+api_key = os.getenv('FISH_AUDIO_API_KEY')
 
 class Voicer:
     def __init__(self, directory, comments):
@@ -34,12 +35,47 @@ class Voicer:
         # generate and save voice
         print(f"generating voice for comment {text} with path {voice_path}")
         os.makedirs(os.path.dirname(voice_path), exist_ok=True)
-        with open(voice_path, 'wb') as f:
-            for chunk in session.tts(TTSRequest(
-                reference_id=os.getenv('FISH_AUDIO_MODEL'),
-                text=text
-            )):
-                f.write(chunk)
+        
+        # Make HTTP API call to Fish Audio TTS
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+        
+        payload = {
+            "text": text,
+            "temperature": 0.7,
+            "top_p": 0.7,
+            "reference_id": os.getenv('FISH_AUDIO_MODEL'),
+            "prosody": {
+                "speed": 1,
+                "volume": 0
+            },
+            "chunk_length": 200,
+            "normalize": True,
+            "format": "mp3",
+            "sample_rate": 44100,
+            "mp3_bitrate": 128,
+            "opus_bitrate": 32,
+            "latency": "normal"
+        }
+        
+        try:
+            response = requests.post(
+                f"{base_url}/v1/tts",
+                headers=headers,
+                json=payload,
+                stream=True
+            )
+            response.raise_for_status()
+            
+            with open(voice_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+        except requests.exceptions.RequestException as e:
+            print(f"Error generating voice for {text}: {e}")
+            return None
         time.sleep(1)
 
         return voice_path

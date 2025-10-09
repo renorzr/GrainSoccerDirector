@@ -30,7 +30,6 @@ RUN apt-get update && apt-get install -y \
     x264 \
     libx264-dev \
     libgl1-mesa-dri \
-    libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender1 \
@@ -68,7 +67,7 @@ EXPOSE 8000
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/api || exit 1
+CMD curl -f http://localhost:8000/api || exit 1
 
 # 激活环境并启动命令
 SHELL ["conda", "run", "-n", "grainsoccer", "/bin/bash", "-c"]
