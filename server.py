@@ -3,7 +3,7 @@ dotenv.load_dotenv()
 
 import traceback
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from game import Game
@@ -22,13 +22,9 @@ from voicer import Voicer
 from task import Task, TaskStatus
 from utils import video_preview, events_path
 from clips import make_final_video as _make_final_video, join_videos as _join_videos, trim_video as _trim_video, get_video_props
-import subprocess
-import tempfile
-import shutil
 
 GAME_DATA_DIR = os.getenv("GAME_DATA_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "games"))
 VIDEO_EXTENSIONS = os.getenv("VIDEO_EXTENSIONS", "mp4,mov,avi,mkv,webm").split(",")
-CACHE_DIR = os.getenv("CACHE_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache"))
 
 
 app = FastAPI(
@@ -412,50 +408,10 @@ async def head_video_preview(game_id: str, filename: str):
     return Response(status_code=200)
 
 @app.get("/video/{game_id}/{filename}")
-async def get_video(game_id: str, filename: str, request: Request):
+async def get_video(game_id: str, filename: str):
     if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
         raise HTTPException(status_code=400, detail="Invalid file type")
-    
-    filepath = os.path.join(GAME_DATA_DIR, game_id, filename)
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="Video file not found")
-    
-    # 获取查询参数
-    optimize = request.query_params.get('optimize', 'true').lower() == 'true'
-    max_width = int(request.query_params.get('max_width', '1280'))
-    max_height = int(request.query_params.get('max_height', '720'))
-    bitrate = request.query_params.get('bitrate', '1M')
-    
-    # 如果不需要优化，直接返回原文件
-    if not optimize:
-        return FileResponse(filepath)
-    
-    # 检查是否需要优化
-    if not should_optimize_video(filepath, max_width, max_height):
-        return FileResponse(filepath)
-    
-    # 检查缓存
-    cache_path = get_cache_path(filepath, max_width, max_height, bitrate)
-    if is_cache_valid(cache_path, filepath):
-        return FileResponse(cache_path)
-    
-    # 尝试预生成缓存
-    cache_path = pregenerate_cache(filepath, max_width, max_height, bitrate)
-    if cache_path and os.path.exists(cache_path):
-        return FileResponse(cache_path)
-    
-    # 如果缓存生成失败，使用流式传输
-    def generate_stream():
-        return generate_optimized_video_stream(filepath, max_width, max_height, bitrate)
-    
-    return StreamingResponse(
-        generate_stream(),
-        media_type="video/mp4",
-        headers={
-            "Content-Disposition": f"inline; filename={filename}",
-            "Cache-Control": "public, max-age=3600"
-        }
-    )
+    return FileResponse(os.path.join(GAME_DATA_DIR, game_id, filename))
 
 @app.post("/video/{game_id}/{filename}/rename")
 async def rename_video(game_id: str, filename: str, new_filename: str):
@@ -476,49 +432,6 @@ async def delete_video(game_id: str, filename: str):
     os.remove(os.path.join(GAME_DATA_DIR, game_id, filename))
     return {"filename": filename, "deleted": True}
 
-@app.post("/video/{game_id}/{filename}/optimize")
-async def optimize_video(game_id: str, filename: str, request: Request):
-    """
-    预优化视频文件
-    """
-    if not filename.lower().endswith(tuple(VIDEO_EXTENSIONS)):
-        raise HTTPException(status_code=400, detail="Invalid file type")
-    
-    filepath = os.path.join(GAME_DATA_DIR, game_id, filename)
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="Video file not found")
-    
-    # 获取查询参数
-    max_width = int(request.query_params.get('max_width', '1280'))
-    max_height = int(request.query_params.get('max_height', '720'))
-    bitrate = request.query_params.get('bitrate', '1M')
-    
-    # 预生成缓存
-    cache_path = pregenerate_cache(filepath, max_width, max_height, bitrate)
-    
-    if cache_path and os.path.exists(cache_path):
-        return {
-            "filename": filename,
-            "optimized": True,
-            "cache_path": cache_path,
-            "message": "Video optimized successfully"
-        }
-    else:
-        raise HTTPException(status_code=500, detail="Failed to optimize video")
-
-@app.delete("/cache")
-async def clear_cache():
-    """
-    清理所有缓存文件
-    """
-    try:
-        if os.path.exists(CACHE_DIR):
-            shutil.rmtree(CACHE_DIR)
-            os.makedirs(CACHE_DIR, exist_ok=True)
-        return {"message": "Cache cleared successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")
-
 def get_game_name(id: str):
     try:
         with open(os.path.join(GAME_DATA_DIR, id, 'game.yaml'), "r", encoding="utf-8") as f:
@@ -528,156 +441,6 @@ def get_game_name(id: str):
 
 def game_data_path(id: str, segment: int):
     return os.path.join(GAME_DATA_DIR, id, f'game.{segment}.pkl')
-
-def optimize_video_for_streaming(input_path: str, output_path: str, max_width: int = 1280, max_height: int = 720, bitrate: str = "1M"):
-    """
-    使用FFmpeg优化视频用于流式传输
-    """
-    try:
-        # 构建FFmpeg命令
-        cmd = [
-            'ffmpeg', '-i', input_path,
-            '-vf', f'scale={max_width}:{max_height}:force_original_aspect_ratio=decrease',
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '23',
-            '-maxrate', bitrate,
-            '-bufsize', f'{int(bitrate[:-1]) * 2}M',
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-movflags', 'faststart',
-            '-y',  # 覆盖输出文件
-            output_path
-        ]
-        
-        # 执行FFmpeg命令
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"FFmpeg error: {result.stderr}")
-            return False
-        return True
-    except Exception as e:
-        print(f"Error optimizing video: {e}")
-        return False
-
-def get_video_info(filepath: str):
-    """
-    获取视频信息
-    """
-    try:
-        cmd = [
-            'ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', filepath
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            return None
-        import json
-        return json.loads(result.stdout)
-    except Exception as e:
-        print(f"Error getting video info: {e}")
-        return None
-
-def should_optimize_video(filepath: str, max_width: int = 1280, max_height: int = 720):
-    """
-    判断视频是否需要优化
-    """
-    info = get_video_info(filepath)
-    if not info:
-        return True
-    
-    video_stream = None
-    for stream in info.get('streams', []):
-        if stream.get('codec_type') == 'video':
-            video_stream = stream
-            break
-    
-    if not video_stream:
-        return True
-    
-    width = int(video_stream.get('width', 0))
-    height = int(video_stream.get('height', 0))
-    
-    return width > max_width or height > max_height
-
-def get_cache_path(filepath: str, max_width: int, max_height: int, bitrate: str):
-    """
-    获取缓存文件路径
-    """
-    # 创建缓存目录
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    
-    # 生成缓存文件名
-    filename = os.path.basename(filepath)
-    name, ext = os.path.splitext(filename)
-    cache_filename = f"{name}_{max_width}x{max_height}_{bitrate}{ext}"
-    return os.path.join(CACHE_DIR, cache_filename)
-
-def is_cache_valid(cache_path: str, original_path: str):
-    """
-    检查缓存是否有效
-    """
-    if not os.path.exists(cache_path):
-        return False
-    
-    # 检查缓存文件是否比原文件新
-    cache_mtime = os.path.getmtime(cache_path)
-    original_mtime = os.path.getmtime(original_path)
-    
-    return cache_mtime >= original_mtime
-
-def generate_optimized_video_stream(filepath: str, max_width: int = 1280, max_height: int = 720, bitrate: str = "1M"):
-    """
-    生成优化的视频流
-    """
-    def generate():
-        try:
-            # 使用FFmpeg进行实时转码
-            cmd = [
-                'ffmpeg', '-i', filepath,
-                '-vf', f'scale={max_width}:{max_height}:force_original_aspect_ratio=decrease',
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',  # 使用最快的预设
-                '-crf', '28',  # 较高的CRF值，降低质量但提高速度
-                '-maxrate', bitrate,
-                '-bufsize', f'{int(bitrate[:-1]) * 2}M',
-                '-c:a', 'aac',
-                '-b:a', '128k',
-                '-movflags', 'faststart',
-                '-f', 'mp4',
-                'pipe:1'  # 输出到标准输出
-            ]
-            
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            # 流式传输数据
-            while True:
-                chunk = process.stdout.read(8192)  # 8KB chunks
-                if not chunk:
-                    break
-                yield chunk
-            
-            process.wait()
-            
-        except Exception as e:
-            print(f"Error generating video stream: {e}")
-            yield b''
-    
-    return generate()
-
-def pregenerate_cache(filepath: str, max_width: int = 1280, max_height: int = 720, bitrate: str = "1M"):
-    """
-    预生成缓存文件
-    """
-    cache_path = get_cache_path(filepath, max_width, max_height, bitrate)
-    
-    if is_cache_valid(cache_path, filepath):
-        return cache_path
-    
-    # 生成缓存文件
-    if optimize_video_for_streaming(filepath, cache_path, max_width, max_height, bitrate):
-        return cache_path
-    else:
-        return None
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
