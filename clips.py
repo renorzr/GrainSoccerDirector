@@ -107,4 +107,6 @@ def get_video_props(file):
     }
 
 def decode_fourcc(cc):
+    if cc == 0:
+        return "unknown"
     return "".join([chr((int(cc) >> 8 * i) & 0xFF) for i in range(4)])

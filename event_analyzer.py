@@ -47,6 +47,12 @@ class EventAnalyzer:
             elif event.type == EventType.End:
                 self.end_time = event.time
 
+        if self.start_time is None:
+            raise Exception("Start event not found")
+
+        if self.end_time is None:
+            raise Exception("End event not found")
+
     # 分析事件(生成解说词, 更新比分, 更新死球状态)
     def analyze(self, force=False):
         if os.path.exists(game_data_path(self.game.game_id, self.segment)) and not force:
