@@ -147,8 +147,8 @@ function displayGames(games) {
             <h3>比赛 ${gameId}</h3>
             <p>比赛ID: ${gameId}</p>
             <div class="game-actions">
-                <button class="btn btn-primary" onclick="showGameDetail('${gameId}')">进入比赛</button>
-                <button class="btn btn-danger" onclick="deleteGame('${gameId}')">删除比赛</button>
+                <button class="btn btn-primary" onclick="showGameDetail('${gameId}')">查看</button>
+                <button class="btn btn-danger" onclick="deleteGame('${gameId}')">删除</button>
             </div>
         </div>
     `).join('');

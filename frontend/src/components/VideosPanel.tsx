@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, RefreshCw, Trash2, Copy, Play, Eye, Link, Scissors, Edit3 } from 'lucide-react';
+import { Upload, RefreshCw, Trash2, Download, Play, Eye, Link, Scissors, Edit3 } from 'lucide-react';
 import { videoApi } from '../services/api';
 import { Video } from '../types';
-import { getErrorMessage, formatFileSize, formatDate, copyToClipboard } from '../utils';
+import { getErrorMessage, formatFileSize, formatDate } from '../utils';
 import { Alert } from './Alert';
 import { VideoPreviewModal } from './VideoPreviewModal';
 import { JoinVideoModal } from './JoinVideoModal';
@@ -141,14 +141,25 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
         }
     };
 
-    const handleCopyUrl = async (video: Video) => {
-        const videoUrl = videoApi.getVideoUrl(gameId, video.name);
-        const success = await copyToClipboard(videoUrl);
-        if (success) {
-            // Show success message
+    const handleDownloadVideo = async (video: Video) => {
+        try {
+            const videoUrl = videoApi.getVideoUrl(gameId, video.name);
+            const response = await fetch(videoUrl);
+            const blob = await response.blob();
+
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = video.name;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
             setError(null);
-        } else {
-            setError('复制失败，请手动复制链接');
+        } catch (err) {
+            setError('下载失败，请重试');
         }
     };
 
@@ -281,10 +292,10 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
                                 <div className="video-actions-item">
                                     <button
                                         className="btn btn-primary btn-sm"
-                                        onClick={() => handleCopyUrl(video)}
-                                        title="复制链接"
+                                        onClick={() => handleDownloadVideo(video)}
+                                        title="下载视频"
                                     >
-                                        <Copy size={16} />
+                                        <Download size={16} />
                                     </button>
                                     <button
                                         className="btn btn-secondary btn-sm"
