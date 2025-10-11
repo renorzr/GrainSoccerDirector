@@ -18,7 +18,6 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
     const [selectedSegment, setSelectedSegment] = useState(1);
     const [starting, setStarting] = useState(false);
     const [cancelling, setCancelling] = useState(false);
-    const [polling, setPolling] = useState(false);
     const [game, setGame] = useState<Game | null>(null);
     const [previewModal, setPreviewModal] = useState<{ isOpen: boolean; videoUrl: string }>({
         isOpen: false,
@@ -30,14 +29,12 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
     useEffect(() => {
         loadGame();
         loadTaskStatus();
-    }, [gameId]);
 
-    useEffect(() => {
-        if (polling) {
-            const interval = setInterval(loadTaskStatus, 2000);
-            return () => clearInterval(interval);
-        }
-    }, [polling]);
+        const intervalId = setInterval(loadTaskStatus, 2000);
+        return () => {
+            clearInterval(intervalId);
+        };
+    }, [gameId]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -81,10 +78,8 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
             setError(null);
             const taskData = await taskApi.getTaskStatus(gameId, 'make_video');
             setTask(taskData);
-
-            // 如果任务完成或失败，停止轮询并清除任务状态
             if (taskData.status === 'completed' || taskData.status === 'failed' || taskData.status === 'cancelled') {
-                setPolling(false);
+                await loadGame();
             }
         } catch (err) {
             setError(getErrorMessage(err));
@@ -98,7 +93,6 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
             setStarting(true);
             setError(null);
             await taskApi.startVideoMaking(gameId, segment);
-            setPolling(true);
             await loadTaskStatus();
         } catch (err) {
             setError(getErrorMessage(err));
@@ -112,7 +106,6 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
             setStarting(true);
             setError(null);
             await taskApi.startFinalVideoMaking(gameId);
-            setPolling(true);
             await loadTaskStatus();
         } catch (err) {
             setError(getErrorMessage(err));
@@ -130,7 +123,6 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
             setCancelling(true);
             setError(null);
             await taskApi.cancelTask(gameId, 'make_video');
-            setPolling(false);
             await loadTaskStatus();
         } catch (err) {
             setError(getErrorMessage(err));
