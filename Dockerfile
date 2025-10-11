@@ -71,4 +71,4 @@ CMD curl -f http://localhost:8000/api || exit 1
 
 # 激活环境并启动命令
 SHELL ["conda", "run", "-n", "grainsoccer", "/bin/bash", "-c"]
-CMD ["conda", "run", "-n", "--no-capture-output", "grainsoccer", "python", "server.py"]
+CMD ["conda", "run", "-n", "grainsoccer", "--no-capture-output", "python", "server.py"]
