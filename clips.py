@@ -35,11 +35,7 @@ def make_final_video(game, task=None):
         '-f', 'concat',
         '-safe', '0',
         '-i', concat_file,
-        '-c:v', 'libx264',  # Re-encode video to H.264
-        '-c:a', 'aac',      # Re-encode audio to AAC
-        '-r', '30',         # Set consistent frame rate to 30fps
-        '-preset', 'fast',  # Use fast encoding preset
-        '-crf', '23',       # Set quality (18-28, lower is better quality)
+        '-c', 'copy',
         output_file
     ]
     
