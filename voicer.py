@@ -4,6 +4,7 @@ import os
 import hashlib
 import requests
 import json
+from clips import get_duration
 VOICE_DIR = 'voices'
 base_url = os.getenv('FISH_AUDIO_BASE_URL', 'https://api.fish.audio')
 api_key = os.getenv('FISH_AUDIO_API_KEY')
@@ -88,19 +89,7 @@ class Voicer:
 
         # Use ffmpeg to get the duration of the audio file
         try:
-            result = subprocess.run(
-                [
-                    "ffprobe",
-                    "-v", "error",
-                    "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    voice_path
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
-            )
-            duration = float(result.stdout.strip())
+            duration = get_duration(voice_path)
         except Exception as e:
             print(f"Error getting duration of {voice_path}: {e}")
             return {"path": voice_path, "duration": 0, "start": 0}

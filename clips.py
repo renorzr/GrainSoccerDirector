@@ -73,7 +73,10 @@ def join_videos(game, videos, output_file, task=None):
 def trim_video(game, video, start_time, end_time, output_file, task=None):
     input_path = os.path.join(game.directory, video)
     output_path = os.path.join(game.directory, output_file)
-    
+    trim_clip(input_path, start_time, end_time, output_path)
+    return output_file
+
+def trim_clip(input_path, start_time, end_time, output_path):
     cmd = [
         'ffmpeg', '-y',  # -y to overwrite output file
         '-i', input_path,
@@ -83,15 +86,28 @@ def trim_video(game, video, start_time, end_time, output_file, task=None):
         output_path
     ]
     
-    if task:
-        print(f"Trimming video: {video} from {start_time}s to {end_time}s")
+    print(f"Trimming video: {input_path} from {start_time}s to {end_time}s")
     
     subprocess.run(cmd, check=True)
 
-    return output_file
 
 def format_ffmpeg_time(time: float):
     return f'{int(time // 3600)}:{int((time % 3600) // 60)}:{int(time % 60)}'
+
+def get_duration(path: str):
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            path
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    return float(result.stdout.strip())
 
 
 def get_video_props(file):
