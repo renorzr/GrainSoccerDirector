@@ -9,16 +9,9 @@ import cv2
 from scoreboard import Scoreboard
 import glob
 from clips import get_duration, trim_clip
+from logo_drawer import LogoDrawer
+from constants import GOAL_DURATION, TEMP_VIDEO_NAME, TEMP_AUDIO_NAME, REPLAY_BUFFER, INTERRUPT_BUFFER
 
-PREVIEW_BUFFER = 2
-DELAY_BEFORE_REPLAY = 6
-REPLAY_BUFFER = 2
-HIGHLIGHT_EXTEND = 3
-INTERRUPT_BUFFER = 0.5
-LOGO_STAY = 0.5
-LOGO_FLY = 0.8
-TEMP_VIDEO_NAME = 'temp.mp4'
-TEMP_AUDIO_NAME = 'temp.aac'
 
 # 剪辑器
 class Editor:
@@ -35,7 +28,6 @@ class Editor:
         self.scoreboard = Scoreboard.from_dict(
             {'title': self.game.name, 'team0': self.game.teams[0].name, 'team1': self.game.teams[1].name, 'segment': segment}, 
             self.game.scoreboard_props)
-        self.load_logo_video()
         self.segment = segment
         game_data = load_game_data(self.game.game_id, self.segment)
         self.comments = game_data['comments']
@@ -45,22 +37,6 @@ class Editor:
         self.events = Event.load_from_csv(events_path(self.game.game_id, self.segment))
         self.start_time = game_data['start_time']
         self.end_time = game_data['end_time']
-
-    def load_logo_video(self):
-        logo_video_path = self.game.logo_video if os.path.isabs(self.game.logo_video) else os.path.join(self.game.directory, self.game.logo_video)
-        logo_video_cap = cv2.VideoCapture(logo_video_path)
-        fps = logo_video_cap.get(cv2.CAP_PROP_FPS)
-        frames = []
-        while True:
-            ret, frame = logo_video_cap.read()
-            if not ret:
-                break
-            frames.append(frame)
-
-        duration = len(frames) / fps
-        logo_video_cap.release()
-        self.logo_video = {"fps": fps, "duration": duration, "frames": frames}
-        print(f"loading logo video {logo_video_path} with {self.logo_video['fps']} fps and {self.logo_video['duration']} duration")
 
     def game_video(self, segment):
         return os.path.join(self.game.directory, self.game.videos[segment - 1])
@@ -88,6 +64,9 @@ class Editor:
         print(f"found {len(replay_events)} replay events")
         self.calculate_logo_times(replay_events)
 
+        logo_video_path = self.game.logo_video if os.path.isabs(self.game.logo_video) else os.path.join(self.game.directory, self.game.logo_video)
+        logo_drawer = LogoDrawer(logo_video_path, self.logo_times)
+
         cap = cv2.VideoCapture(self.game_video(self.segment))
         fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -101,6 +80,7 @@ class Editor:
         processing_replay_event = None
         frame_count = 0
         goal_out = None
+        goal_start_time = None
 
         while True:
             # 检查是否被取消
@@ -122,27 +102,24 @@ class Editor:
                 if time > first_replay_event_time - REPLAY_BUFFER and time < first_replay_event_time + REPLAY_BUFFER:
                     processing_replay_event = replay_events.pop(0)
                     print(f"processing replay event {processing_replay_event.type.name} {format_time(processing_replay_event.time)}")
-                    replay_frames.append(frame.copy())
-                    replay_frames.append(frame.copy())
+                    replay_frame = frame.copy()
+                    replay_frames.append(replay_frame)
+                    replay_frames.append(replay_frame)
                     if processing_replay_event.type == EventType.Goal:
                         goal_out = cv2.VideoWriter(os.path.join(self.game.directory, f'silent-goal-{self.game.game_id}-{self.segment}-{format_time(processing_replay_event.time, 1, False)}.mp4'), cv2.VideoWriter_fourcc(*'h264'), fps, (width, height))
                         if not goal_out.isOpened():
                             raise RuntimeError("Failed to open goal video writer")
+                        goal_start_time = processing_replay_event.time
             else:
                 if time > processing_replay_event.time - REPLAY_BUFFER and time < processing_replay_event.time + REPLAY_BUFFER:
-                    replay_frames.append(frame.copy())
-                    replay_frames.append(frame.copy())
+                    replay_frame = frame.copy()
+                    replay_frames.append(replay_frame)
+                    replay_frames.append(replay_frame)
                 else:
                     print(f"processed replay event {processing_replay_event.type.name} {format_time(processing_replay_event.time)}")
                     replay_time = processing_replay_event.replay_time
                     processing_replay_event = None
 
-                    if goal_out is not None:
-                        goal_out.release()
-                        goal_out = None
-
-            if goal_out is not None:
-                goal_out.write(frame)
 
             if replay_time is not None and time > replay_time:
                 if len(replay_frames) > 0:
@@ -153,7 +130,16 @@ class Editor:
             frame_count += 1
 
             self.draw_scoreboard(time, frame)
-            self.draw_logo(time, frame)
+
+            if goal_out is not None:
+                goal_out.write(frame)
+                if time > goal_start_time + GOAL_DURATION:
+                    goal_out.release()
+                    goal_out = None
+                    goal_start_time = None
+
+            logo_drawer.draw_logo(time, frame)
+
             if frame_count % 10 == 0:
                 print(f"frame {frame_count} / {cap.get(cv2.CAP_PROP_FRAME_COUNT)}", end="\r")
             out.write(frame)
@@ -323,33 +309,8 @@ class Editor:
     def calculate_logo_times(self, replay_events):
         self.logo_times = []
         for replay_event in replay_events:
-            self.logo_times.append(replay_event.replay_time - self.logo_video["duration"] / 2)
-            self.logo_times.append(replay_event.replay_time + REPLAY_BUFFER * 4 - self.logo_video["duration"] / 2)
-
-    def draw_logo(self, time, frame):
-        first_logo_time = len(self.logo_times) > 0 and self.logo_times[0] or None
-
-        if first_logo_time is None:
-            return
-
-        if time > first_logo_time + self.logo_video["duration"]:
-            print(f"logo time {first_logo_time} + {self.logo_video['duration']} is past, popping logo time")
-            if len(self.logo_times) > 0:
-                self.logo_times.pop(0)
-            return;
-
-        if time >= first_logo_time:
-            logo_time = time - first_logo_time
-            logo_frame_index = int(logo_time * self.logo_video["fps"])
-            logo_frame = self.logo_video["frames"][logo_frame_index]
-            if logo_time < LOGO_FLY / 2:
-                alpha = 1 - logo_time / (LOGO_FLY / 2)
-            elif logo_time > self.logo_video["duration"] - LOGO_FLY / 2:
-                alpha = 1 - (self.logo_video["duration"] - logo_time) / (LOGO_FLY / 2)
-            else:
-                alpha = 0
-
-            cv2.addWeighted(frame, alpha, logo_frame, 1 - alpha, 0, frame)
+            self.logo_times.append(replay_event.replay_time)
+            self.logo_times.append(replay_event.replay_time + REPLAY_BUFFER * 4)
 
     # 计算重放片段的时间
     def calculate_replay_times(self):

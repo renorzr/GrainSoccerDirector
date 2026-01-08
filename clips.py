@@ -3,7 +3,9 @@ import os
 import subprocess
 from event import EventType
 from utils import format_time
-
+from logo_drawer import LogoDrawer
+import glob
+from constants import REPLAY_BUFFER
 
 
 def make_final_video(game, task=None):
@@ -39,13 +41,132 @@ def make_final_video(game, task=None):
         output_file
     ]
     
-    if task:
-        print(f"Creating final video: {output_file}")
+    print(f"Creating final video: {output_file}")
     
     subprocess.run(cmd, check=True)
     
     # Clean up concat file
     os.remove(concat_file)
+
+    make_goals_video(game, task)
+
+def make_goals_video(game, task=None):
+    goal_clip_paths = glob.glob(os.path.join(game.directory, 'goal-*.mp4'))
+    goal_clip_paths.sort()
+    logo_times = [0]
+    for goal_clip_path in goal_clip_paths:
+        logo_times.append(logo_times[-1] + get_duration(goal_clip_path) + REPLAY_BUFFER * 4)
+    logo_video_path = game.logo_video if os.path.isabs(game.logo_video) else os.path.join(game.directory, game.logo_video)
+    logo_drawer = LogoDrawer(logo_video_path, logo_times)
+    print(f"logo times: {logo_times}")
+
+    out_frame_count = 0
+    out = None
+    fps = 0
+    for index, goal_clip_path in enumerate(goal_clip_paths):
+        task.update_progress("make_goals_video", index, len(goal_clip_paths))
+        print(f"making goals video {index} / {len(goal_clip_paths)} {goal_clip_path}")
+        cap = cv2.VideoCapture(goal_clip_path)
+        frames = []
+        in_frame_count = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                if len(frames) > 0:                 
+                    frame = frames.pop(0)
+                else:
+                    break
+
+            if not out:
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                out = cv2.VideoWriter(os.path.join(game.directory, 'silent-goals.mp4'), cv2.VideoWriter_fourcc(*'h264'), fps, (width, height))
+                if not out.isOpened():
+                    raise RuntimeError("Failed to open video writer")
+
+            in_time = in_frame_count / fps
+            out_time = out_frame_count / fps
+            in_frame_count += 1
+            out_frame_count += 1
+
+            if in_time < REPLAY_BUFFER * 2:
+                replay_frame = frame.copy()
+                frames.append(replay_frame)
+                frames.append(replay_frame)
+
+            logo_drawer.draw_logo(out_time, frame)
+            out.write(frame)
+
+        cap.release()
+        print(f"made goals video {index} / {len(goal_clip_paths)} {goal_clip_path}")
+
+    # Release VideoWriter before using the file with ffmpeg
+    if out:
+        out.release()
+        out = None
+
+    print("add audio to goals video")
+    logo_times.pop()  # Remove the last element which is the total duration
+    goal_clips_args = []
+    for goal_clip_path in goal_clip_paths:
+        goal_clips_args.append('-i')
+        goal_clips_args.append(goal_clip_path)
+    
+    bgm_path = game.bgm if os.path.isabs(game.bgm) else os.path.join(game.directory, game.bgm)
+    
+    # Get video duration to limit BGM length
+    silent_goals_path = os.path.join(game.directory, 'silent-goals.mp4')
+    video_duration = get_duration(silent_goals_path)
+
+    # Build filter_complex for audio mixing
+    # Input 0: silent-goals.mp4 (video)
+    # Input 1, 2, ...: goal clips (audio)
+    # Input len(goal_clip_paths)+1: bgm (audio)
+    filter_parts = []
+    audio_labels = []
+    for i, goal_clip_path in enumerate(goal_clip_paths):
+        audio_input_index = i + 1  # Audio inputs start from index 1
+        delay_ms = int(logo_times[i] * 1000)  # Convert seconds to milliseconds
+        label = f'a{i}'
+        audio_labels.append(label)
+        # adelay format: adelay=delay_in_ms|delay_in_ms (for stereo, use same value for both channels)
+        filter_parts.append(f'[{audio_input_index}:a]adelay={delay_ms}|{delay_ms}[{label}]')
+    
+    # Add BGM: trim to video duration, reduce volume to 0.15 (15%), and add 1 second fade out at the end
+    bgm_input_index = len(goal_clip_paths) + 1
+    bgm_trimmed_label = 'bgm_trimmed'
+    bgm_label = 'bgm_faded'
+    fade_start = max(0, video_duration - 1)  # Start fade 1 second before end
+    # First trim and set volume
+    filter_parts.append(f'[{bgm_input_index}:a]atrim=0:{video_duration},asetpts=PTS-STARTPTS,volume=0.15[{bgm_trimmed_label}]')
+    # Then add fade out effect in the last 1 second
+    filter_parts.append(f'[{bgm_trimmed_label}]afade=t=out:st={fade_start}:d=1[{bgm_label}]')
+    
+    # Mix all audio streams (goal clips + bgm)
+    # BGM volume is set to 0.2 (20%) so it doesn't overpower goal clip audio
+    # duration=longest ensures output matches longest input
+    # dropout_transition=0 prevents fade in/out when inputs start/stop
+    mix_inputs = ''.join([f'[{label}]' for label in audio_labels])
+    filter_complex = ';'.join(filter_parts) + f';{mix_inputs}[{bgm_label}]amix=inputs={len(audio_labels) + 1}:duration=longest:dropout_transition=0[audio_mixed];[audio_mixed]volume=2.0[audio_out]'
+    
+    command = [
+        'ffmpeg', '-y',  # -y to overwrite output file
+        '-i', os.path.join(game.directory, 'silent-goals.mp4'),
+        *goal_clips_args,
+        '-i', bgm_path,  # Add BGM as input
+        '-filter_complex', filter_complex,
+        '-map', '0:v',  # Map video from input 0
+        '-map', '[audio_out]',  # Map mixed audio
+        '-c:v', 'copy',  # Copy video codec
+        '-c:a', 'aac',  # Encode audio as AAC
+        '-shortest',  # Ensure output duration matches shortest input (video)
+        os.path.join(game.directory, 'goals.mp4'),
+    ]
+    subprocess.run(command, check=True)
+
+    print("done making goals video")
+    return os.path.join(game.directory, 'goals.mp4')
 
 def join_videos(game, videos, output_file, task=None):
     print(f'Joining videos: {videos} -> {output_file}')

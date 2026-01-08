@@ -56,6 +56,9 @@ def load_game_metadata(game_id: str):
     game_data = yaml.safe_load(open(os.path.join(GAME_DATA_DIR, game_id, 'game.yaml'), "r", encoding="utf-8"))
     game_data['directory'] = os.path.join(GAME_DATA_DIR, game_id)
 
+    if not game_data.get('bgm'):
+        game_data['bgm'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'bgm.mp3')
+
     if not game_data.get('logo_video'):
         game_data['logo_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'logo.mp4')
 
@@ -294,7 +297,7 @@ async def make_final_video(id: str):
         if make_video_task and (make_video_task.status == TaskStatus.RUNNING or make_video_task.status == TaskStatus.PENDING):
             raise HTTPException(status_code=409, detail=f"Another task is already running for game: {make_video_task}")
         
-        make_video_task = Task(id, "make_final_video", [("chunk", 10), ("frame_index", 90)])
+        make_video_task = Task(id, "make_final_video", [("chunk", 10), ("frame_index", 70), ("make_goals_video", 20)])
     
     thread = threading.Thread(target=run_make_final_video_task, args=(id,))
     thread.daemon = True
@@ -383,7 +386,8 @@ async def upload_file(game_id: str, key: str, file: UploadFile = File(...)):
 async def get_videos(game_id: str):
     def path(game_id: str, filename: str):
         return os.path.join(GAME_DATA_DIR, game_id, filename)
-    return {"videos": [{'name': filename, 'size': os.path.getsize(path(game_id, filename)), 'last_modified': os.path.getmtime(path(game_id, filename)) * 1000, **get_video_props(path(game_id, filename))} for filename in os.listdir(os.path.join(GAME_DATA_DIR, game_id)) if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
+    files = sorted(os.listdir(os.path.join(GAME_DATA_DIR, game_id)))
+    return {"videos": [{'name': filename, 'size': os.path.getsize(path(game_id, filename)), 'last_modified': os.path.getmtime(path(game_id, filename)) * 1000, **get_video_props(path(game_id, filename))} for filename in files if filename.lower().endswith(tuple(VIDEO_EXTENSIONS))]}
 
 @app.get("/video/{game_id}/{filename}/preview")
 async def get_video_preview(game_id: str, filename: str, request: Request):

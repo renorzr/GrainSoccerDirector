@@ -25,6 +25,7 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
     });
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [allVideosGenerated, setAllVideosGenerated] = useState(false);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     useEffect(() => {
         loadGame();
@@ -80,6 +81,8 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
             setTask(taskData);
             if (taskData.status === 'completed' || taskData.status === 'failed' || taskData.status === 'cancelled') {
                 await loadGame();
+                // 触发VideoPreviewCard重新检查视频是否存在
+                setRefreshTrigger(prev => prev + 1);
             }
         } catch (err) {
             setError(getErrorMessage(err));
@@ -179,6 +182,8 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
             await videoApi.deleteVideo(gameId, videoName);
             // 重新加载游戏数据以更新视频列表
             await loadGame();
+            // 触发VideoPreviewCard重新检查视频是否存在
+            setRefreshTrigger(prev => prev + 1);
         } catch (err) {
             setError(getErrorMessage(err));
         }
@@ -241,6 +246,7 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
                         gameId={gameId}
                         name={`output-${index + 1}.mp4`}
                         title={`第${index + 1}节`}
+                        refreshTrigger={refreshTrigger}
                         onPreview={() => handleVideoPreview(`output-${index + 1}.mp4`)}
                         onDelete={handleDeleteVideo}
                         onDownload={handleDownloadVideo}
@@ -251,6 +257,7 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
                     gameId={gameId}
                     name={`final-${gameId}.mp4`}
                     title={`全场比赛`}
+                    refreshTrigger={refreshTrigger}
                     onPreview={() => handleVideoPreview(`final-${gameId}.mp4`)}
                     onDelete={handleDeleteVideo}
                     onDownload={handleDownloadVideo}
@@ -426,12 +433,13 @@ interface VideoPreviewCardProps {
     gameId: string;
     name: string;
     title: string;
+    refreshTrigger?: number;
     onPreview: (name: string) => void;
     onDelete?: (name: string) => void;
     onDownload?: (name: string) => void;
 }
 
-const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ gameId, name, title, onPreview, onDelete, onDownload }) => {
+const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ gameId, name, title, refreshTrigger, onPreview, onDelete, onDownload }) => {
     const [videoExists, setVideoExists] = useState<boolean | null>(null);
     const [imageError, setImageError] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
@@ -446,7 +454,7 @@ const VideoPreviewCard: React.FC<VideoPreviewCardProps> = ({ gameId, name, title
             }
         };
         checkExists();
-    }, [name, gameId]);
+    }, [name, gameId, refreshTrigger]);
 
     const handleClick = () => {
         if (videoExists) {
