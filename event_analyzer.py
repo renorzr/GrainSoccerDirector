@@ -108,13 +108,11 @@ class EventAnalyzer:
                     comments.append(Comment(event.time, chat_ai.chat("EndQuater"),'event', event.id, event.type.level))
                     continue
             elif event.type == EventType.Goal:
-                comments.append(Comment(event.time, shoot_text(), 'event', event.id, event.type.level))
-                event.time += 1
+                comments.append(Comment(event.time - 1, shoot_text(), 'event', event.id, event.type.level))
                 self.goal_scored(event.time, event.team)
                 event.desc = (event.desc or '') + f", 比分被改写为{self.scores[0]}:{self.scores[1]}"
             elif event.type == EventType.Miss:
-                comments.append(Comment(event.time, shoot_text(), 'event', event.id, event.type.level))
-                event.time += 1
+                comments.append(Comment(event.time - 1, shoot_text(), 'event', event.id, event.type.level))
             elif event.type == EventType.Comment:
                 comments.append(Comment(event.time, event.desc, 'event', event.id, event.type.level))
                 continue
