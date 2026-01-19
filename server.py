@@ -366,7 +366,7 @@ async def trim_video(game_id: str, filename: str, start_time: float, end_time: f
 
 @app.post("/game/{id}/clean")
 async def clean_game(id: str):
-    if os.path.exists(os.path.join(GAME_DATA_DIR, id))
+    if os.path.exists(os.path.join(GAME_DATA_DIR, id)):
         shutil.rmtree(os.path.join(GAME_DATA_DIR, id))
 
     return {"id": id, "cleaned": True}
