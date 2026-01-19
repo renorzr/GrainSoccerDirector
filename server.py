@@ -2,6 +2,7 @@ import dotenv
 dotenv.load_dotenv()
 
 import traceback
+import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -365,12 +366,8 @@ async def trim_video(game_id: str, filename: str, start_time: float, end_time: f
 
 @app.post("/game/{id}/clean")
 async def clean_game(id: str):
-    if os.path.exists(os.path.join(GAME_DATA_DIR, id, 'game.yaml')):
-        os.remove(os.path.join(GAME_DATA_DIR, id, 'game.yaml'))
-
-    for segment in range(1, 5):
-        if os.path.exists(game_data_path(id, segment)):
-            os.remove(game_data_path(id, segment))
+    if os.path.exists(os.path.join(GAME_DATA_DIR, id))
+        shutil.rmtree(os.path.join(GAME_DATA_DIR, id))
 
     return {"id": id, "cleaned": True}
 

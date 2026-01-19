@@ -43,9 +43,11 @@ export const GameList: React.FC = () => {
     };
 
     const handleDeleteGame = async (gameId: string) => {
-        if (!window.confirm(`确定要删除比赛 ${gameId} 吗？此操作不可撤销！`)) {
+        const confirmString = window.prompt(`确定要删除比赛 ${gameId} 吗？此操作不可撤销！\n请输入 "${gameId}" 确认删除：`);
+        if (confirmString !== gameId) {
             return;
         }
+
 
         try {
             setDeletingGame(gameId);
