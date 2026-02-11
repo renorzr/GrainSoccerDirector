@@ -193,26 +193,14 @@ export const VideoPanel: React.FC<VideoPanelProps> = ({ gameId }) => {
         try {
             const videoUrl = videoApi.getVideoUrl(gameId, videoName);
 
-            // 使用fetch获取文件，然后创建blob URL进行下载
-            const response = await fetch(videoUrl);
-            if (!response.ok) {
-                throw new Error('下载失败');
-            }
-
-            const blob = await response.blob();
-            const blobUrl = window.URL.createObjectURL(blob);
-
             const link = document.createElement('a');
-            link.href = blobUrl;
+            link.href = videoUrl;
             link.download = videoName;
             link.style.display = 'none';
 
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
-            // 清理blob URL
-            window.URL.revokeObjectURL(blobUrl);
         } catch (err) {
             setError(`下载视频失败: ${getErrorMessage(err)}`);
         }
