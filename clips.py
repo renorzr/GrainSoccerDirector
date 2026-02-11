@@ -22,7 +22,7 @@ def make_final_video(game, task=None):
             raise FileNotFoundError(f'output-{segment}.mp4 not found')
         video_files.append(segment_path)
 
-    video_files.append(brand_video_path)
+    # video_files.append(brand_video_path)
     
     # Create concat file for ffmpeg
     concat_file = os.path.join(game.directory, 'concat_list.txt')
