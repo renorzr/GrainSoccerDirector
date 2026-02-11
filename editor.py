@@ -10,7 +10,7 @@ from scoreboard import Scoreboard
 import glob
 from clips import get_duration, trim_clip
 from logo_drawer import LogoDrawer
-from constants import GOAL_DURATION, TEMP_VIDEO_NAME, TEMP_AUDIO_NAME, REPLAY_BUFFER, INTERRUPT_BUFFER
+from constants import GOAL_DURATION, TEMP_VIDEO_NAME, TEMP_AUDIO_NAME, REPLAY_BUFFER, INTERRUPT_BUFFER, TARGET_FPS
 
 
 # 剪辑器
@@ -68,19 +68,25 @@ class Editor:
         logo_drawer = LogoDrawer(logo_video_path, self.logo_times)
 
         cap = cv2.VideoCapture(self.game_video(self.segment))
-        fps = cap.get(cv2.CAP_PROP_FPS)
+        input_fps = cap.get(cv2.CAP_PROP_FPS)  # Original fps for time calculations
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.end_time = self.end_time or cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps
-        out = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'h264'), fps, (width, height))
+        self.end_time = self.end_time or cap.get(cv2.CAP_PROP_FRAME_COUNT) / input_fps
+        # Use TARGET_FPS for output video to ensure all videos have unified fps
+        out = cv2.VideoWriter(temp_video_path, cv2.VideoWriter_fourcc(*'h264'), TARGET_FPS, (width, height))
         if not out.isOpened():
             raise RuntimeError("Failed to open video writer")
         replay_frames = []
         replay_time = None
         processing_replay_event = None
         frame_count = 0
+        output_frame_count = 0  # Track output frame count for fps conversion
         goal_out = None
         goal_start_time = None
+
+        # Calculate frame ratio for fps conversion
+        fps_ratio = TARGET_FPS / input_fps if input_fps > 0 else 1.0
+        print(f"Input FPS: {input_fps}, Output FPS: {TARGET_FPS}, Ratio: {fps_ratio:.3f}")
 
         while True:
             # 检查是否被取消
@@ -95,7 +101,7 @@ class Editor:
             if not ret:
                 break
 
-            time = frame_count / fps
+            time = frame_count / input_fps  # Time based on input video
 
             if processing_replay_event is None:
                 first_replay_event_time = len(replay_events) > 0 and replay_events[0].time or -100
@@ -106,7 +112,7 @@ class Editor:
                     replay_frames.append(replay_frame)
                     replay_frames.append(replay_frame)
                     if processing_replay_event.type == EventType.Goal:
-                        goal_out = cv2.VideoWriter(os.path.join(self.game.directory, f'silent-goal-{self.game.game_id}-{self.segment}-{format_time(processing_replay_event.time, 1, False)}.mp4'), cv2.VideoWriter_fourcc(*'h264'), fps, (width, height))
+                        goal_out = cv2.VideoWriter(os.path.join(self.game.directory, f'silent-goal-{self.game.game_id}-{self.segment}-{format_time(processing_replay_event.time, 1, False)}.mp4'), cv2.VideoWriter_fourcc(*'h264'), TARGET_FPS, (width, height))
                         if not goal_out.isOpened():
                             raise RuntimeError("Failed to open goal video writer")
                         goal_start_time = processing_replay_event.time
@@ -140,9 +146,26 @@ class Editor:
 
             logo_drawer.draw_logo(time, frame)
 
+            # Handle fps conversion: calculate which output frame this input frame should map to
+            # Based on time alignment: output_frame = time * TARGET_FPS
+            expected_output_frame = int(time * TARGET_FPS)
+            
+            if fps_ratio >= 1.0:
+                # Output fps >= input fps: need to repeat frames
+                # Write this frame for all output frames until we catch up to expected frame
+                while output_frame_count <= expected_output_frame:
+                    out.write(frame)
+                    output_frame_count += 1
+            else:
+                # Output fps < input fps: need to skip some frames
+                # Only write if this frame maps to a new output frame we haven't written yet
+                if expected_output_frame >= output_frame_count:
+                    # Write frame and update to next expected frame
+                    out.write(frame)
+                    output_frame_count = expected_output_frame + 1
+
             if frame_count % 10 == 0:
-                print(f"frame {frame_count} / {cap.get(cv2.CAP_PROP_FRAME_COUNT)}", end="\r")
-            out.write(frame)
+                print(f"frame {frame_count} / {cap.get(cv2.CAP_PROP_FRAME_COUNT)} (output: {output_frame_count})", end="\r")
 
         out.release()  # release the cv2's VideoWriter
         cap.release()
@@ -290,8 +313,18 @@ class Editor:
         temp_video_path = os.path.join(self.game.directory, TEMP_VIDEO_NAME)
         temp_audio_path = os.path.join(self.game.directory, TEMP_AUDIO_NAME)
         output_video_path = os.path.join(self.game.directory, f'output-{self.segment}.mp4')
-        command = f"ffmpeg -i {temp_video_path} -i {temp_audio_path} -c:v copy -c:a aac -strict experimental {output_video_path} -y"
-        subprocess.run(command, shell=True)
+        
+        # Video already has unified fps from create_output_video, so we can use copy codec
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', temp_video_path,
+            '-i', temp_audio_path,
+            '-c:v', 'copy',  # Copy video (already has unified fps)
+            '-c:a', 'aac',  # Re-encode audio with AAC
+            '-b:a', '192k',  # Audio bitrate
+            output_video_path
+        ]
+        subprocess.run(cmd, check=True)
         os.remove(temp_video_path)
         os.remove(temp_audio_path)
 

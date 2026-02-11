@@ -24,58 +24,31 @@ def make_final_video(game, task=None):
 
     # video_files.append(brand_video_path)
     
-    # Get fps from first video to use as target fps
-    first_video_props = get_video_props(video_files[0])
-    target_fps = first_video_props['fps']
-    print(f"Target FPS for final video: {target_fps}")
+    # All segment videos should already have unified fps from add_audio()
+    # So we can use simple concat with copy codec for fast concatenation
+    concat_file = os.path.join(game.directory, 'concat_list.txt')
+    with open(concat_file, 'w') as f:
+        for video_file in video_files:
+            f.write(f"file '{video_file}'\n")
     
-    # Build ffmpeg command with concat filter to unify fps
+    # Use ffmpeg to concatenate videos with copy codec (fast, no re-encoding)
     output_file = os.path.join(game.directory, f'final-{game.game_id}.mp4')
-    
-    # Build input arguments
-    input_args = []
-    for video_file in video_files:
-        input_args.extend(['-i', video_file])
-    
-    # Build filter_complex to unify fps and concatenate
-    # Format: [0:v]fps=target_fps[v0];[0:a]asetpts=PTS-STARTPTS[a0];[1:v]fps=target_fps[v1];[1:a]asetpts=PTS-STARTPTS[a1];...[v0][a0][v1][a1]...concat=n=N:v=1:a=1[outv][outa]
-    filter_parts = []
-    video_labels = []
-    audio_labels = []
-    
-    for i in range(len(video_files)):
-        # Normalize video fps
-        video_labels.append(f'v{i}')
-        filter_parts.append(f'[{i}:v]fps={target_fps}[{video_labels[i]}]')
-        # Normalize audio timestamps
-        # Note: This assumes all videos have audio streams. If some don't, 
-        # ffmpeg will fail and you may need to add audio stream detection.
-        audio_labels.append(f'a{i}')
-        filter_parts.append(f'[{i}:a]asetpts=PTS-STARTPTS[{audio_labels[i]}]')
-    
-    # Concatenate all streams - concat filter requires alternating video and audio inputs
-    # Format: [v0][a0][v1][a1][v2][a2]...
-    concat_inputs = ''.join([f'[{video_labels[i]}][{audio_labels[i]}]' for i in range(len(video_files))])
-    filter_complex = ';'.join(filter_parts) + f';{concat_inputs}concat=n={len(video_files)}:v=1:a=1[outv][outa]'
-    
     cmd = [
         'ffmpeg', '-y',  # -y to overwrite output file
-        *input_args,
-        '-filter_complex', filter_complex,
-        '-map', '[outv]',  # Map concatenated video
-        '-map', '[outa]',  # Map concatenated audio
-        '-c:v', 'libx264',  # Re-encode video with H.264
-        '-preset', 'fast',  # Fast encoding preset for speed
-        '-crf', '23',  # Good quality with reasonable file size
-        '-c:a', 'aac',  # Re-encode audio with AAC
-        '-b:a', '192k',  # Audio bitrate
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concat_file,
+        '-c', 'copy',  # Copy streams without re-encoding (fast)
         output_file
     ]
     
     print(f"Creating final video: {output_file}")
-    print(f"Unifying FPS to {target_fps} for {len(video_files)} videos")
+    print(f"Concatenating {len(video_files)} videos (all should have unified fps)")
     
     subprocess.run(cmd, check=True)
+    
+    # Clean up concat file
+    os.remove(concat_file)
 
     make_goals_video(game, task)
 

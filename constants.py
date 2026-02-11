@@ -6,3 +6,4 @@ HIGHLIGHT_EXTEND = 3
 INTERRUPT_BUFFER = 0.5
 TEMP_VIDEO_NAME = 'temp.mp4'
 TEMP_AUDIO_NAME = 'temp.aac'
+TARGET_FPS = 30.0  # Target FPS for unified video output
