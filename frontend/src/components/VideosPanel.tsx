@@ -144,18 +144,12 @@ export const VideosPanel: React.FC<VideosPanelProps> = ({ gameId }) => {
     const handleDownloadVideo = async (video: Video) => {
         try {
             const videoUrl = videoApi.getVideoUrl(gameId, video.name);
-            const response = await fetch(videoUrl);
-            const blob = await response.blob();
-
-            // Create download link
-            const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
-            link.href = url;
+            link.href = videoUrl;
             link.download = video.name;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
 
             setError(null);
         } catch (err) {
