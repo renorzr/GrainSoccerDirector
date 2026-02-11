@@ -53,8 +53,9 @@ def make_final_video(game, task=None):
         audio_labels.append(f'a{i}')
         filter_parts.append(f'[{i}:a]asetpts=PTS-STARTPTS[{audio_labels[i]}]')
     
-    # Concatenate all streams
-    concat_inputs = ''.join([f'[{label}]' for label in video_labels + audio_labels])
+    # Concatenate all streams - concat filter requires alternating video and audio inputs
+    # Format: [v0][a0][v1][a1][v2][a2]...
+    concat_inputs = ''.join([f'[{video_labels[i]}][{audio_labels[i]}]' for i in range(len(video_files))])
     filter_complex = ';'.join(filter_parts) + f';{concat_inputs}concat=n={len(video_files)}:v=1:a=1[outv][outa]'
     
     cmd = [
