@@ -12,10 +12,6 @@ def make_final_video(game, task=None):
     # Create a list of video files to concatenate
     video_files = []
     
-    # Add brand video
-    brand_video_path = game.brand_video if os.path.isabs(game.brand_video) else os.path.join(game.directory, game.brand_video)
-    video_files.append(brand_video_path)
-    
     # Add segment videos with brand video between each
     for segment in range(1, len(game.videos) + 1):
         segment_path = os.path.join(game.directory, f'output-{segment}.mp4')
@@ -23,6 +19,10 @@ def make_final_video(game, task=None):
             raise FileNotFoundError(f'output-{segment}.mp4 not found')
         video_files.append(segment_path)
         video_files.append(brand_video_path)
+    
+    # Add brand video
+    brand_video_path = game.brand_video if os.path.isabs(game.brand_video) else os.path.join(game.directory, game.brand_video)
+    video_files.append(brand_video_path)
     
     # Create concat file for ffmpeg
     concat_file = os.path.join(game.directory, 'concat_list.txt')
