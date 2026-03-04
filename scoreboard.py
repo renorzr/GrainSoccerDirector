@@ -8,17 +8,30 @@ DEFAULT_FONT = 'SourceHanSansSC-Medium'
 
 
 class TextProp:
-    def __init__(self, left, top, width, height, color=None, font=None):
+    def __init__(self, left, top, width, height, color=None, font=None, font_size=None, autofit=None):
         self.left = left
         self.top = top
         self.width = width
         self.height = height
         self.color = color
         self.font = font
+        self.font_size = font_size
+        self.autofit = autofit
 
     @classmethod
-    def from_dict(cls, obj):
-        return cls(obj['left'], obj['top'], obj['width'], obj['height'], color=obj.get('color'), font=obj.get('font')) if obj is not None else None
+    def from_dict(cls, obj, default_font=None, default_font_size=None, default_autofit=None):
+        if obj is None:
+            return None
+        return cls(
+            obj['left'],
+            obj['top'],
+            obj['width'],
+            obj['height'],
+            color=obj.get('color'),
+            font=obj.get('font', default_font),
+            font_size=obj.get('font_size', default_font_size),
+            autofit=obj.get('autofit', default_autofit),
+        )
 
 class Scoreboard:
     def __init__(self, img: str, texts: dict, textprops: dict):
@@ -28,10 +41,13 @@ class Scoreboard:
         self.scoreboard_img = cv2.imread(img, cv2.IMREAD_UNCHANGED)
         self.current_scoreboard_img = None
         self.current_scoreboard_key = None
+        self.position = None
 
     def create_scoreboard_img(self, time_str, score0, score1):
         # 创建一个图，在scoreboard_img加上时间和比分
         # 复制scoreboard底图
+        if self.scoreboard_img is None:
+            return None
         img = self.scoreboard_img.copy()
         # 转换为PIL图像以便绘制文字
         if img.shape[2] == 4:
@@ -80,36 +96,90 @@ class Scoreboard:
     def from_dict(cls, texts, obj):
         textprops = {}
         img = 'scoreboard.png'
+        position = None
+        default_font = None
+        default_font_size = None
+        default_autofit = None
         for key, value in obj.items():
             if key == 'img':
                 img = value
+            elif key == 'position':
+                position = value
+            elif key == 'font':
+                default_font = value
+            elif key == 'font_size':
+                default_font_size = value
+            elif key == 'autofit':
+                default_autofit = value
             else:
-                textprops[key] = TextProp.from_dict(value)
+                textprops[key] = TextProp.from_dict(
+                    value,
+                    default_font=default_font,
+                    default_font_size=default_font_size,
+                    default_autofit=default_autofit,
+                )
 
-        return cls(img, texts, textprops)
+        scoreboard = cls(img, texts, textprops)
+        scoreboard.position = position
+        return scoreboard
 
 
     def render_frame(self, frame, time, score0, score1):
         time_str = format_time(time, 0)
+        if self.scoreboard_img is None:
+            return frame
+        self.update_scoreboard_img(time_str, score0, score1)
+        current_img = self.current_scoreboard_img
+        if current_img is None:
+            return frame
+        sh, sw = current_img.shape[:2]
         # If scoreboard image has alpha, blend it onto the frame
-        sh, sw = self.scoreboard_img.shape[:2]
         fh, fw = frame.shape[:2]
 
-        # Place scoreboard at the top center
+        # Place scoreboard based on configuration (default: top center)
         x_offset = (fw - sw) // 2
         y_offset = 0
+        if self.position:
+            align = self.position.get('align', 'top_center') if isinstance(self.position, dict) else 'top_center'
+            offset_x = int(self.position.get('offset_x', 0)) if isinstance(self.position, dict) else 0
+            offset_y = int(self.position.get('offset_y', 0)) if isinstance(self.position, dict) else 0
 
-        self.update_scoreboard_img(time_str, score0, score1)
-        if self.current_scoreboard_img.shape[2] == 4:
-            alpha_s = self.current_scoreboard_img[:, :, 3] / 255.0
+            if align in ('top_left', 'left_top'):
+                x_offset = 0
+                y_offset = 0
+            elif align in ('top_right', 'right_top'):
+                x_offset = fw - sw
+                y_offset = 0
+            elif align in ('center', 'center_center'):
+                x_offset = (fw - sw) // 2
+                y_offset = (fh - sh) // 2
+            elif align in ('bottom_left', 'left_bottom'):
+                x_offset = 0
+                y_offset = fh - sh
+            elif align in ('bottom_right', 'right_bottom'):
+                x_offset = fw - sw
+                y_offset = fh - sh
+            elif align in ('bottom_center', 'center_bottom'):
+                x_offset = (fw - sw) // 2
+                y_offset = fh - sh
+            else:
+                # Default to top_center
+                x_offset = (fw - sw) // 2
+                y_offset = 0
+
+            x_offset += offset_x
+            y_offset += offset_y
+        sh, sw = current_img.shape[:2]
+        if current_img.shape[2] == 4:
+            alpha_s = current_img[:, :, 3] / 255.0
             alpha_l = 1.0 - alpha_s
             for c in range(0, 3):
                 frame[y_offset:y_offset+sh, x_offset:x_offset+sw, c] = (
-                    alpha_s * self.current_scoreboard_img[:, :, c] +
+                    alpha_s * current_img[:, :, c] +
                     alpha_l * frame[y_offset:y_offset+sh, x_offset:x_offset+sw, c]
                 )
         else:
-            frame[y_offset:y_offset+sh, x_offset:x_offset+sw] = self.current_scoreboard_img
+            frame[y_offset:y_offset+sh, x_offset:x_offset+sw] = current_img
         return frame
 
     def update_scoreboard_img(self, time_str, score0, score1):
@@ -129,13 +199,49 @@ def draw_text(draw, text, textprop):
         # Try to parse color string (e.g., "#RRGGBB" or "red")
         try:
             if textprop.color.startswith("#"):
-                color = tuple(int(textprop.color[i:i+2], 16) for i in (1, 3, 5))[::-1]
+                color = tuple(int(textprop.color[i:i+2], 16) for i in (1, 3, 5))
         except Exception:
             pass
 
     x, y = int(textprop.left), int(textprop.top)
-    font = ImageFont.truetype(os.path.join(os.path.dirname(__file__), "fonts", "SourceHanSansSC-Regular.otf"), textprop.height)
-    draw.text((x, y),  str(text), font=font, fill = (color[0], color[1], color[2], 255))
+    width, height = int(textprop.width), int(textprop.height)
+    font_size = textprop.font_size or height
+    font_name = textprop.font or DEFAULT_FONT
+    font_path = os.path.join(os.path.dirname(__file__), "fonts", f"{font_name}.otf")
+    autofit = bool(textprop.autofit)
+
+    if autofit and width > 0 and height > 0:
+        font_size = fit_font_size(draw, str(text), font_path, width, height, font_size)
+
+    font = ImageFont.truetype(font_path, font_size)
+    if autofit and width > 0 and height > 0:
+        bbox = draw.textbbox((0, 0), str(text), font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        x_center = x + (width - text_w) // 2 - bbox[0]
+        y_center = y + (height - text_h) // 2 - bbox[1]
+        draw.text((x_center, y_center), str(text), font=font, fill=(color[0], color[1], color[2], 255))
+        return
+
+    draw.text((x, y), str(text), font=font, fill=(color[0], color[1], color[2], 255))
+
+
+def fit_font_size(draw, text, font_path, max_width, max_height, max_size):
+    low = 6
+    high = max(6, int(max_size))
+    best = low
+    while low <= high:
+        mid = (low + high) // 2
+        font = ImageFont.truetype(font_path, mid)
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+        if text_w <= max_width and text_h <= max_height:
+            best = mid
+            low = mid + 1
+        else:
+            high = mid - 1
+    return best
 
 
 if __name__ == '__main__':

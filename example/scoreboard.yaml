@@ -1,30 +1,40 @@
-segment:
-  left: 170
-  top: 70
-  width: 30
-  height: 10
+font: SourceHanSansSC-Regular
+font_size: 28
+autofit: true
+position:
+  align: top_left
+  offset_x: 10
+  offset_y: 10
 score0:
-  left: 12
-  top: 32
-  width: 20
-  height: 20
+  left: 140
+  top: 0
+  width: 72
+  height: 72
+  font_size: 36
+  color: "#020167"
 score1:
-  left: 327
-  top: 32
-  width: 18
-  height: 18
+  left: 212
+  top: 0
+  width: 73
+  height: 72
+  font_size: 36
+  color: "#020167"
 team0:
-  left: 50
-  top: 30
-  width: 70
-  height: 25
+  left: 0
+  top: 0
+  width: 140
+  height: 72
+  color: "#F8E608"
 team1:
-  left: 230
-  top: 30
-  width: 70
-  height: 25
+  left: 285
+  top: 0
+  width: 147
+  height: 72
+  color: "#F8E608"
 time:
-  left: 145
-  top: 30
-  width: 65
-  height: 20
+  left: 432
+  top: 0
+  width: 154
+  height: 72
+  font_size: 30
+  color: "#020167"
