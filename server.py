@@ -60,8 +60,8 @@ def load_game_metadata(game_id: str):
     if not game_data.get('bgm'):
         game_data['bgm'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'bgm.mp3')
 
-    if not game_data.get('logo_video'):
-        game_data['logo_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'logo.mp4')
+    if not game_data.get('replay_wipe_image'):
+        game_data['replay_wipe_image'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'replay_wipe_image.png')
 
     if not game_data.get('brand_video'):
         game_data['brand_video'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'brand.mp4')

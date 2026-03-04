@@ -9,7 +9,7 @@ import cv2
 from scoreboard import Scoreboard
 import glob
 from clips import get_duration, trim_clip
-from logo_drawer import LogoDrawer
+from replay_wipe_drawer import ReplayWipeDrawer
 from constants import GOAL_DURATION, TEMP_VIDEO_NAME, TEMP_AUDIO_NAME, REPLAY_BUFFER, INTERRUPT_BUFFER, TARGET_FPS
 
 
@@ -23,7 +23,7 @@ class Editor:
         self.scoreboard_clips = []
         self.comment_audio = None
         self.current_score = None
-        self.logo_times = None
+        self.replay_wipe_times = None
         self.task = task
         self.scoreboard = Scoreboard.from_dict(
             {'title': self.game.name, 'team0': self.game.teams[0].name, 'team1': self.game.teams[1].name, 'segment': segment}, 
@@ -62,10 +62,10 @@ class Editor:
 
         replay_events = self.calculate_replay_times()
         print(f"found {len(replay_events)} replay events")
-        self.calculate_logo_times(replay_events)
+        self.calculate_replay_wipe_times(replay_events)
 
-        logo_video_path = self.game.logo_video if os.path.isabs(self.game.logo_video) else os.path.join(self.game.directory, self.game.logo_video)
-        logo_drawer = LogoDrawer(logo_video_path, self.logo_times)
+        replay_wipe_image_path = self.game.replay_wipe_image if os.path.isabs(self.game.replay_wipe_image) else os.path.join(self.game.directory, self.game.replay_wipe_image)
+        replay_wipe_drawer = ReplayWipeDrawer(replay_wipe_image_path, self.replay_wipe_times, self.game.replay_wipe, wipe_direction=self.game.replay_wipe_direction, wipe_zoom=self.game.replay_wipe_zoom)
 
         cap = cv2.VideoCapture(self.game_video(self.segment))
         input_fps = cap.get(cv2.CAP_PROP_FPS)  # Original fps for time calculations
@@ -137,14 +137,14 @@ class Editor:
 
             self.draw_scoreboard(time, frame)
 
-            if goal_out is not None:
+            if goal_out is not None and goal_start_time is not None:
                 goal_out.write(frame)
                 if time > goal_start_time + GOAL_DURATION:
                     goal_out.release()
                     goal_out = None
                     goal_start_time = None
 
-            logo_drawer.draw_logo(time, frame)
+            replay_wipe_drawer.draw_replay_wipe(time, frame)
 
             # Handle fps conversion: calculate which output frame this input frame should map to
             # Based on time alignment: output_frame = time * TARGET_FPS
@@ -339,11 +339,11 @@ class Editor:
             (_, score0, score1) = self.current_score
             self.scoreboard.render_frame(frame, time - self.start_time, score0, score1)
 
-    def calculate_logo_times(self, replay_events):
-        self.logo_times = []
+    def calculate_replay_wipe_times(self, replay_events):
+        self.replay_wipe_times = []
         for replay_event in replay_events:
-            self.logo_times.append(replay_event.replay_time)
-            self.logo_times.append(replay_event.replay_time + REPLAY_BUFFER * 4)
+            self.replay_wipe_times.append(replay_event.replay_time)
+            self.replay_wipe_times.append(replay_event.replay_time + REPLAY_BUFFER * 4)
 
     # 计算重放片段的时间
     def calculate_replay_times(self):

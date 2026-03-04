@@ -16,9 +16,14 @@ class Game:
         self.comment_requirement = obj.get('comment_requirement')
         self.teams = [Team(obj['name'], obj['color'], obj.get('code')) for obj in obj['teams']]
         self.videos = obj.get('videos', [])
-        self.logo_video = obj.get('logo_video')
+        self.replay_wipe_image = obj.get('replay_wipe_image')
+        if not self.replay_wipe_image:
+            self.replay_wipe_image = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'resources', 'replay_wipe_image.png')
         self.brand_video = obj.get('brand_video')
         self.bgm = obj.get('bgm')
+        self.replay_wipe = obj.get('replay_wipe', 'chevron')
+        self.replay_wipe_direction = obj.get('replay_wipe_direction', 'down')
+        self.replay_wipe_zoom = obj.get('replay_wipe_zoom', 1.05)
         self.prev_time = parse_time(obj.get('prev_time', 0))
         self.narrator = obj.get('narrator', '云说')
         self.directory = obj['directory']

@@ -3,7 +3,7 @@ import os
 import subprocess
 from event import EventType
 from utils import format_time
-from logo_drawer import LogoDrawer
+from replay_wipe_drawer import ReplayWipeDrawer
 import glob
 from constants import REPLAY_BUFFER
 
@@ -55,18 +55,19 @@ def make_final_video(game, task=None):
 def make_goals_video(game, task=None):
     goal_clip_paths = glob.glob(os.path.join(game.directory, 'goal-*.mp4'))
     goal_clip_paths.sort()
-    logo_times = [0]
+    replay_wipe_times = [0.0]  # type: list[float]
     for goal_clip_path in goal_clip_paths:
-        logo_times.append(logo_times[-1] + get_duration(goal_clip_path) + REPLAY_BUFFER * 4)
-    logo_video_path = game.logo_video if os.path.isabs(game.logo_video) else os.path.join(game.directory, game.logo_video)
-    logo_drawer = LogoDrawer(logo_video_path, logo_times)
-    print(f"logo times: {logo_times}")
+        replay_wipe_times.append(replay_wipe_times[-1] + get_duration(goal_clip_path) + REPLAY_BUFFER * 4)
+    replay_wipe_image_path = game.replay_wipe_image if os.path.isabs(game.replay_wipe_image) else os.path.join(game.directory, game.replay_wipe_image)
+    replay_wipe_drawer = ReplayWipeDrawer(replay_wipe_image_path, replay_wipe_times, game.replay_wipe, wipe_direction=game.replay_wipe_direction, wipe_zoom=game.replay_wipe_zoom)
+    print(f"replay wipe times: {replay_wipe_times}")
 
     out_frame_count = 0
     out = None
     fps = 0
     for index, goal_clip_path in enumerate(goal_clip_paths):
-        task.update_progress("make_goals_video", index, len(goal_clip_paths))
+        if task is not None:
+            task.update_progress("make_goals_video", index, len(goal_clip_paths))
         print(f"making goals video {index} / {len(goal_clip_paths)} {goal_clip_path}")
         cap = cv2.VideoCapture(goal_clip_path)
         frames = []
@@ -97,7 +98,7 @@ def make_goals_video(game, task=None):
                 frames.append(replay_frame)
                 frames.append(replay_frame)
 
-            logo_drawer.draw_logo(out_time, frame)
+            replay_wipe_drawer.draw_replay_wipe(out_time, frame)
             out.write(frame)
 
         cap.release()
@@ -109,7 +110,7 @@ def make_goals_video(game, task=None):
         out = None
 
     print("add audio to goals video")
-    logo_times.pop()  # Remove the last element which is the total duration
+    replay_wipe_times.pop()  # Remove the last element which is the total duration
     goal_clips_args = []
     for goal_clip_path in goal_clip_paths:
         goal_clips_args.append('-i')
@@ -129,7 +130,7 @@ def make_goals_video(game, task=None):
     audio_labels = []
     for i, goal_clip_path in enumerate(goal_clip_paths):
         audio_input_index = i + 1  # Audio inputs start from index 1
-        delay_ms = int(logo_times[i] * 1000)  # Convert seconds to milliseconds
+        delay_ms = int(replay_wipe_times[i] * 1000)  # Convert seconds to milliseconds
         label = f'a{i}'
         audio_labels.append(label)
         # adelay format: adelay=delay_in_ms|delay_in_ms (for stereo, use same value for both channels)

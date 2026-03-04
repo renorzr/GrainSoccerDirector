@@ -104,8 +104,10 @@ teams:
 
 # 视频相关配置
 main_video: "game.mp4"        # 主视频文件
-logo_img: "logo.png"          # 队伍logo图片（可选）
-logo_video: "logo.mp4"        # 开场logo视频（可选）
+replay_wipe_image: "replay_wipe_image.png" # 重放擦除图片（可选）
+replay_wipe: "chevron"        # 擦除效果：chevron/left/top/radial/blinds（可选）
+replay_wipe_direction: "down" # chevron方向：down/up/left/right（可选）
+replay_wipe_zoom: 1.05         # 重放擦除放大倍率（可选，1.0为不放大）
 bgm: "bgm.mp3"               # 背景音乐（可选）
 
 # 时间相关配置
