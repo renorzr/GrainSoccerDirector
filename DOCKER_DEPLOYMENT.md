@@ -1,67 +1,62 @@
 # Docker 部署指南
 
-本文档介绍如何使用 Docker 部署谷粒足球导播 (Soccer Director) 应用。
+本文档说明如何用 Docker / Docker Compose 部署 Grain Soccer Director（Web 版）。
 
 ## 前置要求
 
-- Docker 20.10+ 
-- Docker Compose 2.0+
-- 至少 4GB 可用内存
-- 至少 10GB 可用磁盘空间
+- Docker 20.10+
+- Docker Compose v2+
+- 推荐至少 4GB 内存
+- 推荐至少 10GB 可用磁盘
 
-## 快速开始
+## 目录准备
 
-### 1. 克隆项目
+在项目根目录确保以下目录存在（不存在可创建）：
 
-```bash
-git clone <repository-url>
-cd soccer-director
-```
+- `games/`（读写，存比赛数据）
+- `resources/`（只读，默认素材）
+- `fonts/`（只读，字体）
 
-### 2. 配置环境变量
+## 环境变量
 
-创建 `.env` 文件并配置必要的 API 密钥：
+创建 `.env`：
 
 ```env
-# OpenAI API密钥（用于生成解说文字）
-OPENAI_API_KEY=your_openai_api_key
+# OpenAI-compatible text generation
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+OPENAI_MODEL=qwen-vl-max-latest
 
-# DashScope API密钥（用于语音合成）
-DASHSCOPE_API_KEY=your_dashscope_api_key
+# Fish Audio TTS
+FISH_AUDIO_BASE_URL=https://api.fish.audio
+FISH_AUDIO_API_KEY=
+FISH_AUDIO_MODEL=d8df0ee72d15428891a20aca7f8cd852
 
-# fish.audio API密钥（用于语音合成）
-FISH_AUDIO_API_KEY=your_fish_audio_api_key
-FISH_AUDIO_MODEL=your_fish_audio_model_id
+# Runtime options (optional)
+GAME_DATA_DIR=/app/games
+VIDEO_EXTENSIONS=mp4,mov,avi,mkv,webm
 ```
 
-### 3. 构建和启动
-
-使用 Docker Compose 一键部署：
+## 一键部署（推荐）
 
 ```bash
-# 构建镜像
-docker-compose build
-
-# 启动服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
+docker compose build
+docker compose up -d
 ```
 
-### 4. 访问应用
+访问：`http://localhost:8000`
 
-打开浏览器访问：http://localhost:8000
-
-## 手动 Docker 部署
-
-如果不使用 Docker Compose，可以手动构建和运行：
+查看日志：
 
 ```bash
-# 构建镜像
+docker compose logs -f
+```
+
+## 手动 docker run
+
+```bash
 docker build -t soccer-director .
 
-# 运行容器
 docker run -d \
   --name soccer-director \
   -p 8000:8000 \
@@ -69,212 +64,69 @@ docker run -d \
   -v $(pwd)/resources:/app/resources:ro \
   -v $(pwd)/fonts:/app/fonts:ro \
   -e OPENAI_API_KEY=your_api_key \
-  -e DASHSCOPE_API_KEY=your_api_key \
-  -e FISH_AUDIO_API_KEY=your_api_key \
-  -e FISH_AUDIO_MODEL=your_model_id \
+  -e OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 \
+  -e OPENAI_MODEL=qwen-vl-max-latest \
+  -e FISH_AUDIO_BASE_URL=https://api.fish.audio \
+  -e FISH_AUDIO_API_KEY=your_fish_audio_key \
+  -e FISH_AUDIO_MODEL=your_fish_audio_model \
   soccer-director
 ```
 
-## 数据持久化
-
-### 游戏数据
-
-游戏数据存储在 `./games` 目录中，包括：
-- 游戏配置文件 (`game.yaml`)
-- 视频文件
-- 分析结果
-- 生成的音频文件
-
-### 资源文件
-
-以下目录会被挂载为只读：
-- `./resources` - 包含 logo、记分牌等资源
-- `./fonts` - 字体文件
-
-## 环境变量
+## 关键变量说明
 
 | 变量名 | 描述 | 默认值 |
-|--------|------|--------|
-| `GAME_DATA_DIR` | 游戏数据目录 | `/app/games` |
-| `VIDEO_EXTENSIONS` | 支持的视频格式 | `mp4,mov,avi,mkv` |
-| `OPENAI_API_KEY` | OpenAI API 密钥 | - |
-| `DASHSCOPE_API_KEY` | DashScope API 密钥 | - |
-| `FISH_AUDIO_API_KEY` | Fish Audio API 密钥 | - |
-| `FISH_AUDIO_MODEL` | Fish Audio 模型 ID | - |
+|---|---|---|
+| `GAME_DATA_DIR` | 容器内比赛数据目录 | `/app/games` |
+| `VIDEO_EXTENSIONS` | 允许上传/处理的视频后缀 | `mp4,mov,avi,mkv,webm` |
+| `OPENAI_API_KEY` | OpenAI 兼容接口密钥 | - |
+| `OPENAI_BASE_URL` | OpenAI 兼容接口地址 | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `OPENAI_MODEL` | 文本模型名 | `qwen-vl-max-latest` |
+| `FISH_AUDIO_BASE_URL` | Fish Audio 接口地址 | `https://api.fish.audio` |
+| `FISH_AUDIO_API_KEY` | Fish Audio 密钥 | - |
+| `FISH_AUDIO_MODEL` | Fish Audio 参考音色模型 ID | - |
 
-## 常用命令
+## 常用运维命令
 
 ```bash
-# 查看容器状态
-docker-compose ps
+# 查看状态
+docker compose ps
 
 # 查看日志
-docker-compose logs -f soccer-director
+docker compose logs -f soccer-director
 
 # 重启服务
-docker-compose restart
+docker compose restart
 
-# 停止服务
-docker-compose down
+# 停止并删除容器
+docker compose down
 
-# 更新镜像
-docker-compose pull
-docker-compose up -d
-
-# 进入容器
-docker-compose exec soccer-director bash
-
-# 清理未使用的镜像
-docker system prune -a
+# 重新构建并启动
+docker compose build --no-cache
+docker compose up -d
 ```
 
-## 故障排除
+## 故障排查
 
-### 1. 容器启动失败
+### 容器启动后健康检查失败
 
-检查日志：
-```bash
-docker-compose logs soccer-director
-```
+- 执行 `docker compose logs -f soccer-director`
+- 检查 8000 端口是否被占用
+- 检查 `.env` 中 API 配置是否为空或拼写错误
 
-常见问题：
-- 端口 8000 被占用
-- 内存不足
-- API 密钥配置错误
+### 页面可访问但功能报错
 
-### 2. 视频处理失败
+- 检查 `OPENAI_*` 是否正确
+- 检查 `FISH_AUDIO_*` 是否正确
+- 检查挂载目录权限（尤其是 `games/`）
 
-确保：
-- 有足够的磁盘空间
-- 视频文件格式正确
-- FFmpeg 正常工作
+### 视频处理报错
 
-### 3. 前端无法访问
+- 检查输入视频格式是否在 `VIDEO_EXTENSIONS`
+- 检查磁盘空间
 
-检查：
-- 容器是否正常运行
-- 端口映射是否正确
-- 防火墙设置
+## 生产环境建议
 
-### 4. API 调用失败
-
-验证：
-- API 密钥是否正确
-- 网络连接是否正常
-- 服务配额是否充足
-
-## 性能优化
-
-### 1. 资源限制
-
-在 `docker-compose.yml` 中调整资源限制：
-
-```yaml
-deploy:
-  resources:
-    limits:
-      memory: 8G
-      cpus: '4.0'
-    reservations:
-      memory: 4G
-      cpus: '2.0'
-```
-
-### 2. 存储优化
-
-- 使用 SSD 存储
-- 定期清理临时文件
-- 监控磁盘使用情况
-
-### 3. 网络优化
-
-- 使用本地镜像仓库
-- 配置代理（如需要）
-
-## 安全建议
-
-1. **API 密钥安全**
-   - 不要在代码中硬编码 API 密钥
-   - 使用环境变量或密钥管理服务
-   - 定期轮换密钥
-
-2. **网络安全**
-   - 配置防火墙规则
-   - 使用 HTTPS（生产环境）
-   - 限制访问来源
-
-3. **数据安全**
-   - 定期备份游戏数据
-   - 加密敏感数据
-   - 监控访问日志
-
-## 生产环境部署
-
-### 1. 使用反向代理
-
-推荐使用 Nginx 作为反向代理：
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    location / {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
-
-### 2. 使用 HTTPS
-
-配置 SSL 证书：
-
-```bash
-# 使用 Let's Encrypt
-certbot --nginx -d your-domain.com
-```
-
-### 3. 监控和日志
-
-- 配置日志收集
-- 设置监控告警
-- 定期健康检查
-
-## 更新和维护
-
-### 1. 应用更新
-
-```bash
-# 拉取最新代码
-git pull
-
-# 重新构建镜像
-docker-compose build --no-cache
-
-# 重启服务
-docker-compose up -d
-```
-
-### 2. 数据备份
-
-```bash
-# 备份游戏数据
-tar -czf games-backup-$(date +%Y%m%d).tar.gz games/
-
-# 恢复数据
-tar -xzf games-backup-20240101.tar.gz
-```
-
-### 3. 清理维护
-
-```bash
-# 清理未使用的容器和镜像
-docker system prune -a
-
-# 清理构建缓存
-docker builder prune -a
-```
+- 在前面加 Nginx/Caddy 反向代理
+- 配置 HTTPS
+- 限制来源 IP 或加鉴权层
+- 对 `games/` 目录做定期备份

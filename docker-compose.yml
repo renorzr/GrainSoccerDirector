@@ -11,12 +11,13 @@ services:
       - ./fonts:/app/fonts:ro
     environment:
       - GAME_DATA_DIR=/app/games
-      - VIDEO_EXTENSIONS=mp4,mov,avi,mkv
+      - VIDEO_EXTENSIONS=mp4,mov,avi,mkv,webm
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       # 从 .env 文件加载 API 密钥（如果存在）
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-}
       - FISH_AUDIO_BASE_URL=${FISH_AUDIO_BASE_URL:-}
       - FISH_AUDIO_API_KEY=${FISH_AUDIO_API_KEY:-}
       - FISH_AUDIO_MODEL=${FISH_AUDIO_MODEL:-}

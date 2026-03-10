@@ -3,14 +3,14 @@ from io import BytesIO
 import openai
 import os
 
-DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY")
-DEFAULT_MODEL = "qwen-vl-max-latest" if DASHSCOPE_API_KEY else "gpt-4o-mini"
-MODEL = os.getenv("AI_MODEL", DEFAULT_MODEL)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+MODEL = os.getenv("OPENAI_MODEL", "qwen-vl-max-latest")
 
 ai_client = openai.OpenAI(
-    api_key=DASHSCOPE_API_KEY,
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-) if DASHSCOPE_API_KEY else openai.OpenAI()
+    api_key=OPENAI_API_KEY,
+    base_url=OPENAI_BASE_URL,
+)
 
 class ChatAI:
     def __init__(self, model=MODEL):

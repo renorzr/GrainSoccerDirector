@@ -1,221 +1,158 @@
 # 谷粒足球导播 (Grain Soccer Director)
 
-一个用于足球比赛视频分析与剪辑的工具，可以自动生成比赛集锦、添加解说配音，并提供丰富的视频编辑功能。
+一个面向足球视频制作的 Web 应用：上传比赛素材、编辑事件与解说、生成分段视频与最终成片。
 
-## 功能特点
+## 核心能力
 
-- 🎥 自动生成比赛集锦
-- 🎤 智能解说配音
-- 📝 比赛事件分析
-- 🎯 进球集锦生成
-- 🎨 自定义记分牌
-- 🎬 视频编辑与预览
-- 📊 比赛数据统计
+- 比赛管理：创建比赛、编辑比赛信息、管理多节比赛配置
+- 事件编辑：按节维护事件时间线并保存
+- 解说生成：基于事件分析生成解说文本，并支持手动修改
+- 视频制作：生成分节视频、最终整场视频、视频拼接与裁剪
+- 素材管理：上传、预览、重命名、删除比赛视频素材
 
-## 安装说明
+## 技术架构
 
-### 使用 Miniconda（推荐）
+- 后端：FastAPI (`server.py`)
+- 前端：React + TypeScript + Vite (`frontend/`)
+- 多媒体处理：FFmpeg
+- 文本模型：OpenAI 兼容接口（默认使用 qwen 模型）
+- 语音合成：Fish Audio API
 
-1. 安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
-2. 克隆项目到本地：
-   ```bash
-   git clone https://github.com/renorzr/soccer-director.git
-   cd soccer-director
-   ```
-3. 运行环境设置脚本：
-   ```bash
-   # Linux/Mac
-   ./setup_dev_env.sh
-   
-   # Windows
-   setup_dev_env.bat
-   ```
-4. 激活环境：
-   ```bash
-   conda activate grainsoccer
-   ```
+## 快速开始（本地开发）
 
-### 使用传统 pip 方式
+### 1) 准备依赖
 
-1. 确保已安装 Python 3.8 或更高版本
-2. 创建并激活虚拟环境：
-   ```bash
-   python -m venv venv
-   # Windows
-   venv\Scripts\activate
-   # Linux/Mac
-   source venv/bin/activate
-   ```
-3. 安装依赖：
-   ```bash
-   pip install -r requirements.txt
-   ```
-5. 配置环境变量：
-   创建 `.env` 文件并添加以下配置：
-   ```env
-   # OpenAI API密钥（用于生成解说文字）
-   OPENAI_API_KEY=your_openai_api_key
+- Python 3.11（推荐使用 conda）
+- Node.js 18+
+- FFmpeg（系统可执行）
 
-   # DashScope API密钥（用于语音合成）
-   DASHSCOPE_API_KEY=your_dashscope_api_key
-
-   # fish.audio API密钥（用于语音合成）
-   FISH_AUDIO_API_KEY=your_fish_audio_api_key
-   FISH_AUDIO_MODEL=your_fish_audio_model_id
-   ```
-
-## 使用方法
-
-### 基本命令
+### 2) 克隆项目
 
 ```bash
-python app.py <操作> <比赛描述文件>
+git clone https://github.com/renorzr/soccer-director.git
+cd soccer-director
 ```
 
-### 支持的操作
+### 3) 安装 Python 依赖
 
-- `mark`: 在原始比赛视频中标记事件
-- `preview`: 预览比赛视频中配音解说的部分
-- `analyze`: 根据比赛事件生成分析数据和解说文字
-- `edit`: 编辑解说文字
-- `make`: 创建并保存比赛视频和集锦
-- `clean`: 删除该比赛生成的中间文件
-- `goals`: 生成进球集锦
-
-### 比赛描述文件示例
-
-创建 `game.yaml` 文件：
-
-```yaml
-# 比赛名称
-name: "2024年足球友谊赛"
-
-# 比赛描述（可选）
-description: "这是一场精彩的足球友谊赛"
-
-# 参赛队伍信息
-teams:
-  - name: "主队"
-    color: "蓝色"     # 队伍颜色（名称，用于解说）
-    score: 0          # 初始比分
-  - name: "客队"
-    color: "红色"
-    score: 0
-
-# 视频相关配置
-main_video: "game.mp4"        # 主视频文件
-replay_wipe_image: "replay_wipe_image.png" # 重放擦除图片（可选）
-replay_wipe: "chevron"        # 擦除效果：chevron/left/top/radial/blinds（可选）
-replay_wipe_direction: "down" # chevron方向：down/up/left/right（可选）
-replay_wipe_zoom: 1.05         # 重放擦除放大倍率（可选，1.0为不放大）
-bgm: "bgm.mp3"               # 背景音乐（可选）
-
-# 时间相关配置
-prev_time: 0                  # 上节比赛结束时间（秒）
-
-# 开场配置（可选）
-intro:
-  - time: 0
-    text: "欢迎收看"
-  - time: 2
-    text: "2024年足球友谊赛"
-
-# 解说员设置
-narrator: "云说"              # 解说员名称
-
-# 记分牌配置
-scoreboard: "scoreboard.yaml" # 记分牌配置文件
-```
-
-### 使用流程
-
-1. 准备比赛视频和配置文件
-2. 标记比赛事件：
-   ```bash
-   python app.py mark game.yaml
-   ```
-3. 分析比赛事件：
-   ```bash
-   python app.py analyze game.yaml
-   ```
-4. 编辑解说文字（可选）：
-   ```bash
-   python app.py edit game.yaml
-   ```
-5. 预览效果：
-   ```bash
-   python app.py preview game.yaml
-   ```
-6. 生成最终视频：
-   ```bash
-   python app.py make game.yaml
-   ```
-
-## 文件说明
-
-- `app.py`: 主程序入口
-- `editor.py`: 视频编辑模块
-- `event_analyzer.py`: 事件分析模块
-- `game.py`: 游戏数据管理
-- `mark.py`: 事件标记工具
-- `utils.py`: 工具函数
-- `clips.py`: 视频片段处理
-- `scoreboard.py`: 记分牌模块
-- `.env`: 环境变量配置文件
-
-## 环境管理
-
-### Conda 环境管理
+使用 conda（推荐）：
 
 ```bash
-# 激活环境
+conda env create -f environment.yml
 conda activate grainsoccer
-
-# 更新环境（当 environment.yml 有变化时）
-conda env update -f environment.yml
-
-# 导出当前环境
-conda env export > environment.yml
-
-# 删除环境
-conda env remove -n grainsoccer
-
-# 查看所有环境
-conda env list
 ```
 
-### 依赖管理
+或使用 venv + pip：
 
-- 主要依赖通过 `environment.yml` 管理
-- 保留 `requirements.txt` 用于兼容性
-- 优先使用 conda 安装包，无法安装的包通过 pip 安装
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-## 注意事项
+### 4) 安装并构建前端
 
-1. 确保视频文件格式为 MP4
-2. 配置文件必须使用 YAML 格式
-3. 所有相关文件（视频、音频、图片）应放在同一目录下
-4. 建议使用 conda 环境运行程序
-5. 请妥善保管 API 密钥，不要将其提交到版本控制系统
+```bash
+cd frontend
+npm ci
+npm run build
+cd ..
+```
+
+### 5) 配置环境变量
+
+复制示例文件并编辑：
+
+```bash
+cp .example.env .env
+```
+
+`.env` 示例（默认值与当前代码一致）：
+
+```env
+# OpenAI-compatible text generation
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+OPENAI_MODEL=qwen-vl-max-latest
+
+# Fish Audio TTS
+FISH_AUDIO_BASE_URL=https://api.fish.audio
+FISH_AUDIO_API_KEY=
+FISH_AUDIO_MODEL=
+
+# Runtime options (optional)
+GAME_DATA_DIR=./games
+VIDEO_EXTENSIONS=mp4,mov,avi,mkv,webm
+```
+
+### 6) 启动服务
+
+```bash
+python server.py
+```
+
+浏览器访问：`http://localhost:8000`
+
+## Docker 部署
+
+使用 Docker Compose：
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+访问：`http://localhost:8000`
+
+详细说明见 `DOCKER_DEPLOYMENT.md`。
+
+## 使用流程（Web）
+
+1. 在首页创建比赛
+2. 上传比赛视频素材
+3. 在“事件编辑”中维护事件时间轴
+4. 在“解说管理”中生成并调整解说文本
+5. 在“视频生成”中生成分段视频或最终成片
+6. 在“视频管理”中预览、拼接、裁剪和导出
+
+## 目录说明
+
+- `server.py`：FastAPI 服务入口
+- `frontend/`：前端项目源码
+- `games/`：比赛数据目录（运行后生成）
+- `resources/`：默认素材（记分牌、品牌片头等）
+- `fonts/`：字体资源
+- `ai.py`：文本模型调用（OpenAI 兼容）
+- `voicer.py`：语音合成调用（Fish Audio）
 
 ## 常见问题
 
-1. **Q: 为什么视频无法播放？**  
-   A: 请确保已安装 VLC 播放器，并且视频格式为 MP4。
+### 前端页面打不开或空白
 
-2. **Q: 如何修改解说声音？**  
-   A: 在配置文件中修改 `narrator` 字段。
+- 先确认已执行 `frontend` 下的 `npm run build`
+- 再确认后端日志中不存在静态文件路径错误
 
-3. **Q: 如何自定义记分牌样式？**  
-   A: 修改 `scoreboard.yaml` 文件中的相关配置。
+### 模型调用失败
 
-4. **Q: 为什么解说生成失败？**  
-   A: 请检查 `.env` 文件中的 API 密钥是否正确配置。
+- 检查 `OPENAI_API_KEY` 是否已配置
+- 检查 `OPENAI_BASE_URL` 与 `OPENAI_MODEL` 是否匹配目标服务
 
-## 贡献指南
+### 语音生成失败
 
-欢迎提交 Issue 和 Pull Request 来帮助改进项目。
+- 检查 `FISH_AUDIO_API_KEY` 与 `FISH_AUDIO_MODEL`
+- 检查网络是否可以访问 `FISH_AUDIO_BASE_URL`
+
+### 视频处理失败
+
+- 确认 FFmpeg 可用
+- 确认磁盘空间充足，输入视频格式在 `VIDEO_EXTENSIONS` 列表中
+
+## 安全建议
+
+- 不要提交 `.env` 到版本库
+- 定期轮换 API 密钥
+- 生产环境建议配合反向代理与 HTTPS
 
 ## 许可证
 
-MIT License 
+MIT License
