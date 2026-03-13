@@ -1,3 +1,5 @@
+![banner](./banner.png "Grain Soccer Director")
+
 # 谷粒足球导播 (Grain Soccer Director)
 
 一个面向足球视频制作的 Web 应用：上传比赛素材、编辑事件与解说、生成分段视频与最终成片。

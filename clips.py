@@ -21,8 +21,7 @@ def make_final_video(game, task=None):
         if not os.path.exists(segment_path):
             raise FileNotFoundError(f'output-{segment}.mp4 not found')
         video_files.append(segment_path)
-
-    # video_files.append(brand_video_path)
+        video_files.append(brand_video_path)
     
     # All segment videos should already have unified fps from add_audio()
     # So we can use simple concat with copy codec for fast concatenation
