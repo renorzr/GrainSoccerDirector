@@ -1,41 +1,41 @@
 img: resources/scoreboard.png
-font: SourceHanSansSC-Regular
+font: SourceHanSansSC-Heavy
 font_size: 28
 autofit: true
 position:
-  align: top_left
-  offset_x: 10
-  offset_y: 10
+  align: top_right
+  offset_x: -7
+  offset_y: 7
 score0:
-  left: 140
+  left: 98
   top: 0
-  width: 72
-  height: 72
+  width: 50
+  height: 50
   font_size: 36
   color: "#020167"
 score1:
-  left: 212
+  left: 148
   top: 0
-  width: 73
-  height: 72
+  width: 51
+  height: 50
   font_size: 36
   color: "#020167"
 team0:
   left: 0
   top: 0
-  width: 140
-  height: 72
+  width: 98
+  height: 50
   color: "#F8E608"
 team1:
-  left: 285
+  left: 200
   top: 0
-  width: 147
-  height: 72
+  width: 103
+  height: 50
   color: "#F8E608"
 time:
-  left: 432
+  left: 302
   top: 0
-  width: 154
-  height: 72
+  width: 108
+  height: 50
   font_size: 30
   color: "#020167"
